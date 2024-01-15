@@ -170,10 +170,9 @@ namespace TRITON_SERVER
                 shape_vec.push_back(dim_value);
             }
             ModelTensorAttr input_attr = {0};
-            input_attr.name[TRITON_MAX_NAME_LENGTH] = '\0';
             input_attr.index = input_index++;
-            snprint(&input_attr.name[0], TRITON_MAX_NAME_LENGTH, name.c_str());
-            if (shape_vec.szie() > TRITON_TENSOR_MAX_DIM_NUM)
+            snprintf(&input_attr.name[0], TRITON_MAX_NAME_LENGTH, "%s", name.c_str());
+            if (shape_vec.size() > TRITON_TENSOR_MAX_DIM_NUM)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "{}:{} input tensor:{} shape dims number:{} "
                     "exceed max dim:{}", model_name, model_version, name, 
@@ -202,10 +201,9 @@ namespace TRITON_SERVER
                 shape_vec.push_back(dim_value);
             }
             ModelTensorAttr output_attr = {0};
-            output_attr.name[TRITON_MAX_NAME_LENGTH] = '\0';
             output_attr.index = output_index++;
-            snprint(&output_attr.name[0], TRITON_MAX_NAME_LENGTH, name.c_str());
-            if (shape_vec.szie() > TRITON_TENSOR_MAX_DIM_NUM)
+            snprintf(&output_attr.name[0], TRITON_MAX_NAME_LENGTH, "%s", name.c_str());
+            if (shape_vec.size() > TRITON_TENSOR_MAX_DIM_NUM)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "{}:{} output tensor:{} shape dims number:{} "
                     "exceed max dim:{}", model_name, model_version, name, 
@@ -358,8 +356,8 @@ namespace TRITON_SERVER
                     }
                     if (err != cudaSuccess)
                     {
-                        std::cerr << "error: failed to cudaFree " << buffer << ": "
-                                << cudaGetErrorString(err) << std::endl;
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree {x}:{}", 
+                            buffer, cudaGetErrorString(err));
                     }
                     break;
                 }
@@ -372,15 +370,14 @@ namespace TRITON_SERVER
                     }
                     if (err != cudaSuccess)
                     {
-                        std::cerr << "error: failed to cudaFree " << buffer << ": "
-                                << cudaGetErrorString(err) << std::endl;
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree {x}:{}", 
+                            buffer, cudaGetErrorString(err));
                     }
                     break;
                 }
             #endif  // TRITON_ENABLE_GPU
             default:
-                std::cerr << "error: unexpected buffer allocated in CUDA managed memory"
-                            << std::endl;
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: unexpected buffer allocated in CUDA managed memory");
                 break;
         }
         delete name;
@@ -430,9 +427,10 @@ namespace TRITON_SERVER
 
     void TritonServerInfer::destroyResponseAllocator(void* allocator)
     {
-        if (nullptr != allocator)
+        TRITONSERVER_ResponseAllocator* response_allocator = (TRITONSERVER_ResponseAllocator*)allocator;
+        if (nullptr != response_allocator)
         {
-            LOG_IF_ERR(TRITONSERVER_ResponseAllocatorDelete(allocator),
+            LOG_IF_ERR(TRITONSERVER_ResponseAllocatorDelete(response_allocator), 
                 "deleting response allocator");
         }
         return;
@@ -443,14 +441,14 @@ namespace TRITON_SERVER
         m_server.reset();
     }
 
-    void TritonServerInfer::init(const ServerConfig* config)
+    int TritonServerInfer::init(const ServerConfig* config)
     {
         uint32_t api_version_major;
         uint32_t api_version_minor;
         FAIL_IF_ERR(TRITONSERVER_ApiVersion(&api_version_major, &api_version_minor), 
             "getting Triton API version");
-        if ((TRITONSERVER_API_VERSION_MAJOR != m_api_version_major) || 
-            (TRITONSERVER_API_VERSION_MINOR > m_api_version_minor))
+        if ((TRITONSERVER_API_VERSION_MAJOR != api_version_major) || 
+            (TRITONSERVER_API_VERSION_MINOR > api_version_minor))
         {
             FAIL("triton server API version mismatch");
         }
@@ -471,21 +469,21 @@ namespace TRITON_SERVER
         bool strict_model = config->strict_model;
 
         TRITONSERVER_ServerOptions* server_options = nullptr;
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsNew(&server_options),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsNew(&server_options), 
             "creating server options");
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetModelRepositoryPath(server_options, model_repository_path.c_str()),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetModelRepositoryPath(server_options, model_repository_path.c_str()), 
             "setting model repository path");
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetLogVerbose(server_options, verbose_level),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetLogVerbose(server_options, verbose_level), 
             "setting verbose logging level");
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetLogFormat(server_options, log_format),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetLogFormat(server_options, log_format), 
             "settiong log format");
-        FAIL_IF_ERROR(TRITONSERVER_ServerOptionsSetLogFile(server_options, log_file.c_str(),
-            "setting log file"));
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetBackendDirectory(server_options, backend_dir.c_str()),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetLogFile(server_options, log_file.c_str()), 
+            "setting log file");
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetBackendDirectory(server_options, backend_dir.c_str()), 
             "setting backend directory");
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetRepoAgentDirectory(server_options, repo_agent_dir.c_str()),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetRepoAgentDirectory(server_options, repo_agent_dir.c_str()), 
             "setting repository agent directory");
-        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetModelControlMode(server_options, model_control),
+        FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetModelControlMode(server_options, model_control), 
             "setting model control model");
         FAIL_IF_ERR(TRITONSERVER_ServerOptionsSetStrictModelConfig(server_options, true),
             "setting strict model configuration");
@@ -585,7 +583,6 @@ namespace TRITON_SERVER
             const rapidjson::Value &model_stats = models_statistic_metadata["model_stats"];
             for (auto &model_item : model_stats.GetArray())
             {
-                ModelInfo model_info;
                 std::string model_name = model_item["name"].GetString();
                 std::string model_version = model_item["version"].GetString();
 
@@ -620,8 +617,7 @@ namespace TRITON_SERVER
                     "deleting model metadata message");
             }
         }
-        printServerModelsInfo();
-        return;
+        return 0;
     }
 
     int TritonServerInfer::getModelInfo(const std::string model_name, const int64_t model_version, 
@@ -630,8 +626,7 @@ namespace TRITON_SERVER
         input_attrs.clear();
         output_attrs.clear();
         // get specific model info
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model {}:{} info", 
-            model_name, model_version);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model {}:{} info", model_name, model_version);
         if (nullptr == m_server.get())
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init");
@@ -667,10 +662,9 @@ namespace TRITON_SERVER
             "deleting models statistic message");
 
         // init model info
-        const rapidjson::Value &model_stats = models_statistic_metadata["model_stats"];
+        const rapidjson::Value &model_stats = model_statistic_metadata["model_stats"];
         for (auto &model_item : model_stats.GetArray())
         {
-            ModelInfo model_info;
             std::string model_name = model_item["name"].GetString();
             std::string model_version_str = model_item["version"].GetString();
             std::string model_key = model_name + ":" + model_version_str;
@@ -678,7 +672,7 @@ namespace TRITON_SERVER
             // get model metadata
             std::stringstream ss;
             int64_t model_version_int;
-            ss << model_version;
+            ss << model_version_str;
             ss >> model_version_int;
             TRITONSERVER_Message* model_metadata_message;
             FAIL_IF_ERR(TRITONSERVER_ServerModelMetadata(m_server.get(), model_name.c_str(), model_version_int, &model_metadata_message), 
@@ -717,7 +711,7 @@ namespace TRITON_SERVER
             {
                 for (const auto& version : model_metadata["versions"].GetArray())
                 {
-                    if (strcmp(version.GetString(), model_version.c_str()) == 0)
+                    if (strcmp(version.GetString(), std::to_string(model_version).c_str()) == 0)
                     {
                         found_version = true;
                         break;
@@ -726,10 +720,10 @@ namespace TRITON_SERVER
             }
             if (-1 == model_version || found_version)
             {
-                if (0 != parseModelMetadata(model_name, model_version, input_attrs, output_attrs))
+                if (0 != parseModelMetadata(model_metadata, model_name, std::to_string(model_version), 
+                    input_attrs, output_attrs))
                 {
-                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "parsing model {} metadata fail",
-                        model_key);
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "parsing model {} metadata fail", model_key);
                     input_attrs.clear();
                     output_attrs.clear();
                     return -1;
@@ -757,7 +751,7 @@ namespace TRITON_SERVER
             "getting number of response outputs for model " + model_key);
         if (output_count != output_attrs.size())
         {
-            FAIL("expecting " + std::to_string(model_info.outputs.size()) + " response outputs, got " + 
+            FAIL("expecting " + std::to_string(output_attrs.size()) + " response outputs, got " + 
                 std::to_string(output_count) + " for model " + model_key);
         }
 
@@ -935,7 +929,7 @@ namespace TRITON_SERVER
                 "response status for model " + model_key);
 
             // parse model infer output from response
-            parseModelInferResponse(completed_response, output_attrs, output_tensors);
+            parseModelInferResponse(completed_response, model_name, model_version, output_attrs, output_tensors);
 
             // delete model infer response
             FAIL_IF_ERR(TRITONSERVER_InferenceResponseDelete(completed_response), 

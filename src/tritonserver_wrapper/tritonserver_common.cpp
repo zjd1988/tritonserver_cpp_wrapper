@@ -4,17 +4,17 @@
  * @LastEditTime: 2024-01-11 
  * @LastEditors: zjd
  ********************************************/
-#include "tritonserver_wrapper/tritonserver_engine.h"
+#include "tritonserver_wrapper/tritonserver_common.h"
 #include "tritonserver_infer/tritonserver_infer.h"
 
 TRITONSERVER_API ServerConfig defaultServerConfig(const char* model_repository_path, LogVerboseLevel log_verbose_level, 
-    const char* log_file, const char* backend_dir, const char* repo_agent_dir);
+    const char* log_file, const char* backend_dir, const char* repo_agent_dir)
 {
     ServerConfig config = {
-        .model_repository_path = model_repository_path,
+        .model_repository_dir = model_repository_path,
         .log_verbose_level = log_verbose_level,
         .log_format = LOG_FORMAT_DEFAULT,
-        .log_file = log_file,
+        .log_file_path = log_file,
         .model_control = SERVER_MODEL_CONTROL_NONE,
         .strict_model = true,
         .backend_dir = backend_dir,
@@ -35,7 +35,7 @@ TRITONSERVER_API int initTritonServerWithDefault(const char* model_repository_pa
     return initTritonServerWithCustom(&config);
 }
 
-TRITONSERVER_API uninitTritonServer()
+TRITONSERVER_API void uninitTritonServer()
 {
     TRITON_SERVER_UNINIT();
 }

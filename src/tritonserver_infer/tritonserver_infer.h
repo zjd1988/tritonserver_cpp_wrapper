@@ -5,6 +5,7 @@
  * @LastEditors: zjd
  ********************************************/
 #pragma once
+#include <map>
 #include "triton/core/tritonserver.h"
 #include "common/log.h"
 #include "common/non_copyable.h"
@@ -56,7 +57,7 @@ namespace TRITON_SERVER
             const std::vector<std::shared_ptr<TritonTensor>>& input_tensors, 
             std::vector<std::shared_ptr<TritonTensor>>& output_tensors, 
             void* response_allocator = nullptr);
-        int getModelInfo(const std::string model_name, const std::string model_version, 
+        int getModelInfo(const std::string model_name, const int64_t model_version, 
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
 
     private:
@@ -64,6 +65,7 @@ namespace TRITON_SERVER
         ~TritonServerInfer() = default;
 
         void parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
+            const std::string model_name, const std::string model_version, 
             const std::vector<ModelTensorAttr>& output_attrs, 
             std::vector<std::shared_ptr<TritonTensor>>& output_tensors);
 
@@ -71,7 +73,6 @@ namespace TRITON_SERVER
         std::string                                                 m_model_repository_path;
         int32_t                                                     m_verbose_level;
         std::shared_ptr<TRITONSERVER_Server>                        m_server;
-        std::map<std::string, ModelInfo>                            m_models_info;
     };
 
 }  // namespace TRITON_SERVER

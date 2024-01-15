@@ -16,16 +16,16 @@ namespace TRITON_SERVER
         if (nullptr == model_name)
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model name is nullptr");
-            return -1;
+            return;
         }
         if (model_version != -1 && model_version <= 0)
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model version:{} is invalid", model_version);
-            return -1;
+            return;
         }
         m_model_name = model_name;
         m_model_version = model_version;
-        if (0 != TritonServerInfer::Instance().getModelInfo(model_name, model_verison, 
+        if (0 != TritonServerInfer::Instance().getModelInfo(model_name, model_version, 
             m_model_input_attrs, m_model_output_attrs))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "get model {}:{} info fail", model_name, model_version);
@@ -45,7 +45,7 @@ namespace TRITON_SERVER
                 model_name, model_version);
             return;
         }
-        m_status = true;
+        m_model_status = true;
     }
 
     TritonModel::~TritonModel()
@@ -162,7 +162,7 @@ namespace TRITON_SERVER
         m_input_tensors.resize(n_inputs);
         for (uint32_t i = 0; i < n_inputs; i++)
         {
-            ModelTensor* model_tensor = inputs[i];
+            ModelTensor* model_tensor = inputs + i;
             uint32_t index =  model_tensor->index;
             // check input datatype
             TRITONSERVER_DataType dtype = (TRITONSERVER_DataType)model_tensor->type;
@@ -178,7 +178,7 @@ namespace TRITON_SERVER
             std::vector<int64_t> expect_shape(&m_model_input_attrs[index].dims[0], 
                 &m_model_input_attrs[index].dims[0] + num_dim);
             void* data = model_tensor->buf;
-            std::shared_ptr<TritonTensor> triton_tensor(expect_dtype, expect_shape, data);
+            std::shared_ptr<TritonTensor> triton_tensor(new TritonTensor(expect_dtype, expect_shape, data));
             if (nullptr == triton_tensor.get())
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "construct tensor:{} fail", index);
@@ -229,7 +229,7 @@ namespace TRITON_SERVER
         for (auto i = 0; i < m_output_tensors.size(); i++)
         {
             int index = i;
-            ModelTensor* model_tensor = outputs[i];
+            ModelTensor* model_tensor = outputs + i;
             model_tensor->index = index;
             model_tensor->buf = m_output_tensors[i]->base<void>();
             model_tensor->size = m_output_tensors[i]->byteSize();

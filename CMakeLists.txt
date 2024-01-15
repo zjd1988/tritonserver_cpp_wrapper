@@ -7,7 +7,7 @@ if(TRITONSERVER_INSTALL_DIR)
     set(TRITONSERVER_INCLUDE_PATH ${TRITONSERVER_INSTALL_DIR}/include)
     set(TRITONSERVER_LIB_PATH ${TRITONSERVER_INSTALL_DIR}/lib)
 else()
-    set(TRITONSERVER_INCLUDE_PATH /opt/tritonserver)
+    set(TRITONSERVER_INCLUDE_PATH /opt/tritonserver/include)
     set(TRITONSERVER_LIB_PATH /opt/tritonserver/lib)
 endif()
 
