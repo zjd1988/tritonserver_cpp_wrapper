@@ -34,7 +34,7 @@ TRITONSERVER_API int initModel(ModelContext* context, const char* model_name, in
     return:
         int                         0:success -1:fail.
 */
-TRITONSERVER_API int modelDestroy(ModelContext context);
+TRITONSERVER_API void modelDestroy(ModelContext context);
 
 
 /*  modelQuery

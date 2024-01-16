@@ -155,7 +155,7 @@ typedef struct ServerConfig
     ServerModelControl                      model_control;            // model control, NONE/POLL/EXPLICIT
     bool                                    strict_model;             // strict config model
     const char*                             backend_dir;              // triton server backends dir
-    const char*                             repo_agent_dir;           // triton server repo agent dit
+    const char*                             repo_agent_dir;           // triton server repo agent dir
     int                                     check_timeout;            // triton server check ready timeout
 } ServerConfig;
 

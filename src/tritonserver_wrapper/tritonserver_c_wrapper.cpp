@@ -20,10 +20,10 @@ TRITONSERVER_API int initModel(ModelContext* context, const char* model_name, in
     return 0;
 }
 
-TRITONSERVER_API int modelDestroy(ModelContext context)
+TRITONSERVER_API void modelDestroy(ModelContext context)
 {
     if (nullptr == context)
-        return -1;
+        return;
     TritonModel* model_inst = (TritonModel*)context;
     delete model_inst;
     return 0;
