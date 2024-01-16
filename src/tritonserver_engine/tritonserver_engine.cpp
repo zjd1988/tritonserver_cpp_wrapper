@@ -16,7 +16,7 @@
 #endif  // TRITON_ENABLE_GPU
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
-#include "tritonserver_infer/tritonserver_infer.h"
+#include "tritonserver_engine/tritonserver_engine.h"
 
 namespace TRITON_SERVER
 {
@@ -403,13 +403,13 @@ namespace TRITON_SERVER
         }
     }
 
-    TritonServerInfer& TritonServerInfer::Instance()
+    TritonServerEngine& TritonServerEngine::Instance()
     {
-        static TritonServerInfer triton_server;
+        static TritonServerEngine triton_server;
         return triton_server;
     }
 
-    void* TritonServerInfer::createResponseAllocator()
+    void* TritonServerEngine::createResponseAllocator()
     {
         // When triton needs a buffer to hold an output tensor, it will ask
         // us to provide the buffer. In this way we can have any buffer
@@ -425,7 +425,7 @@ namespace TRITON_SERVER
         return allocator;
     }
 
-    void TritonServerInfer::destroyResponseAllocator(void* allocator)
+    void TritonServerEngine::destroyResponseAllocator(void* allocator)
     {
         TRITONSERVER_ResponseAllocator* response_allocator = (TRITONSERVER_ResponseAllocator*)allocator;
         if (nullptr != response_allocator)
@@ -436,12 +436,12 @@ namespace TRITON_SERVER
         return;
     }
 
-    void TritonServerInfer::uninit()
+    void TritonServerEngine::uninit()
     {
         m_server.reset();
     }
 
-    int TritonServerInfer::init(const ServerConfig* config)
+    int TritonServerEngine::init(const ServerConfig* config)
     {
         uint32_t api_version_major;
         uint32_t api_version_minor;
@@ -620,7 +620,7 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    int TritonServerInfer::getModelInfo(const std::string model_name, const int64_t model_version, 
+    int TritonServerEngine::getModelInfo(const std::string model_name, const int64_t model_version, 
         std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs)
     {
         input_attrs.clear();
@@ -739,7 +739,7 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    void TritonServerInfer::parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
+    void TritonServerEngine::parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
         const std::string model_name, const std::string model_version, 
         const std::vector<ModelTensorAttr>& output_attrs, 
         std::vector<std::shared_ptr<TritonTensor>>& output_tensors)
@@ -835,7 +835,7 @@ namespace TRITON_SERVER
         return;
     }
 
-    int TritonServerInfer::infer(const std::string model_name, const std::string model_version, 
+    int TritonServerEngine::infer(const std::string model_name, const std::string model_version, 
         const std::vector<ModelTensorAttr>& input_attrs, 
         const std::vector<ModelTensorAttr>& output_attrs, 
         const std::vector<std::shared_ptr<TritonTensor>>& input_tensors, 

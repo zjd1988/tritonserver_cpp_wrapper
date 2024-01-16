@@ -5,7 +5,7 @@
  * @LastEditors: zjd
  ********************************************/
 #include "tritonserver_wrapper/tritonserver_common.h"
-#include "tritonserver_infer/tritonserver_infer.h"
+#include "tritonserver_engine/tritonserver_engine.h"
 
 TRITONSERVER_API ServerConfig defaultServerConfig(const char* model_repository_path, LogVerboseLevel log_verbose_level, 
     const char* log_file, const char* backend_dir, const char* repo_agent_dir)

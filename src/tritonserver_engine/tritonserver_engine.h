@@ -36,17 +36,17 @@ namespace TRITON_SERVER
         bool                                 m_own = false;
     };
 
-    #define TRITON_SERVER_INIT(config) TRITON_SERVER::TritonServerInfer::Instance().init(config)
+    #define TRITON_SERVER_INIT(config) TRITON_SERVER::TritonServerEngine::Instance().init(config)
 
     #define TRITON_SERVER_INFER(model_info, inputs, outputs) \
-        TRITON_SERVER::TritonServerInfer::Instance().infer(model_info, inputs, outputs)
+        TRITON_SERVER::TritonServerEngine::Instance().infer(model_info, inputs, outputs)
 
-    #define TRITON_SERVER_UNINIT() TRITON_SERVER::TritonServerInfer::Instance().uninit()
+    #define TRITON_SERVER_UNINIT() TRITON_SERVER::TritonServerEngine::Instance().uninit()
 
-    class TritonServerInfer : public NonCopyable
+    class TritonServerEngine : public NonCopyable
     {
     public:
-        static TritonServerInfer& Instance();
+        static TritonServerEngine& Instance();
         int init(const ServerConfig* config);
         void uninit();
         void* createResponseAllocator();
@@ -61,8 +61,8 @@ namespace TRITON_SERVER
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
 
     private:
-        TritonServerInfer() = default;
-        ~TritonServerInfer() = default;
+        TritonServerEngine() = default;
+        ~TritonServerEngine() = default;
 
         void parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
             const std::string model_name, const std::string model_version, 

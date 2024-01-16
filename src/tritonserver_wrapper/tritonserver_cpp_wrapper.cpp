@@ -5,7 +5,7 @@
  * @LastEditors: zjd
  ********************************************/
 #include "common/log.h"
-#include "tritonserver_infer/tritonserver_infer.h"
+#include "tritonserver_engine/tritonserver_engine.h"
 #include "tritonserver_wrapper/tritonserver_cpp_wrapper.h"
 
 namespace TRITON_SERVER
@@ -25,7 +25,7 @@ namespace TRITON_SERVER
         }
         m_model_name = model_name;
         m_model_version = model_version;
-        if (0 != TritonServerInfer::Instance().getModelInfo(model_name, model_version, 
+        if (0 != TritonServerEngine::Instance().getModelInfo(model_name, model_version, 
             m_model_input_attrs, m_model_output_attrs))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "get model {}:{} info fail", model_name, model_version);
@@ -38,7 +38,7 @@ namespace TRITON_SERVER
                 sizeof(m_model_output_attrs.size()));
             return;
         }
-        m_response_allcator = TritonServerInfer::Instance().createResponseAllocator();
+        m_response_allcator = TritonServerEngine::Instance().createResponseAllocator();
         if (nullptr == m_response_allcator)
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating response allocator for {}:{} fail", 
@@ -52,7 +52,7 @@ namespace TRITON_SERVER
     {
         if (nullptr != m_response_allcator)
         {
-            TritonServerInfer::Instance().destroyResponseAllocator(m_response_allcator);
+            TritonServerEngine::Instance().destroyResponseAllocator(m_response_allcator);
         }
     }
 
@@ -205,7 +205,7 @@ namespace TRITON_SERVER
             return -1;
         }
         std::string model_version = std::to_string(m_model_version);
-        return TritonServerInfer::Instance().infer(m_model_name, model_version, 
+        return TritonServerEngine::Instance().infer(m_model_name, model_version, 
             m_model_input_attrs, m_model_output_attrs, m_input_tensors, m_output_tensors);
     }
 
