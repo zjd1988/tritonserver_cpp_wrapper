@@ -26,7 +26,7 @@ TRITONSERVER_API void modelDestroy(ModelContext context)
         return;
     TritonModel* model_inst = (TritonModel*)context;
     delete model_inst;
-    return 0;
+    return;
 }
 
 TRITONSERVER_API int modelQuery(ModelContext context, ModeQueryCmd cmd, void* info, uint32_t size)

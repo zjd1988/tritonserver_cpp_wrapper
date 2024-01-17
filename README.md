@@ -11,5 +11,15 @@ https://github.com/jarro2783/cxxopts.git v3.3.0
 https://github.com/llohse/libnpy.git v1.0.1
 ```
 
+## build
+```
+docker pull nvcr.io/nvidia/tritonserver:23.12-py3
+git clone https://github.com/zjd1988/tritonserver_cpp_wrapper.git
+docker run -it --gpus="device=0" -v $PWD:/workspace/tritonserver_wrapper \
+    nvcr.io/nvidia/tritonserver:23.12-py3 /bin/bash
+cd /workspace/tritonserver_cpp_wrapper
+mkdir build && cd build
+cmake .. && make -j4
+```
 
 

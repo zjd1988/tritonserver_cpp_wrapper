@@ -181,7 +181,7 @@ int main(int argc, char* argv[])
     {
         for (index = 0; index < cmd_option.input_files.size(); index++)
         {
-            fs::path file_path = cmd_option.input_files[i];
+            fs::path file_path = cmd_option.input_files[index];
             file_type = file_path.extension().string();
             if (!fs::exists(file_path))
             {
@@ -271,10 +271,11 @@ FINAL:
     // release input tensor buf
     for (index = 0; index < input_tensors.size(); index++)
     {
-        releaseModelTensor(input_tensors[index]);
+        releaseModelTensor(&input_tensors[index]);
     }
     // destroy model context
-    modelDestroy();
+    modelDestroy(model_context);
+    model_context = nullptr;
 
     // uninit triton server
     uninitTritonServer();

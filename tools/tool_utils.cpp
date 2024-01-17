@@ -60,18 +60,17 @@ namespace TRITON_SERVER
     }
 
     template<typename T>
-    void randomInitTensorData(void* data, int count, const std::default_random_engine& eng)
+    void randomInitTensorData(void* data, int count, std::default_random_engine& eng)
     {
-        T* tensor_data = (T*)m_data;
-        std::uniform_real_distribution<> distr_f(0.0f, 1.0f);
-        std::uniform_int_distribution<> distr_i(-128, 127);
-        std::uniform_int_distribution<> distr_u(0, 255);
+        T* tensor_data = (T*)data;
+        std::uniform_real_distribution<float> distr_f(0.0f, 1.0f);
+        std::uniform_int_distribution<int> distr_i(0, 255);
         if (typeid(int8_t) == typeid(T) || typeid(int16_t) == typeid(T) || 
             typeid(int32_t) == typeid(T) || typeid(int64_t) == typeid(T))
         {
             for (int i = 0; i < count; i++)
             {
-                tensor_data[i] = distr_i(eng);
+                tensor_data[i] = (T)(128 - distr_i(eng));
             }
         }
         else if (typeid(uint8_t) == typeid(T) || typeid(uint16_t) == typeid(T) || 
@@ -79,16 +78,17 @@ namespace TRITON_SERVER
         {
             for (int i = 0; i < count; i++)
             {
-                tensor_data[i] = distr_u(eng);
+                tensor_data[i] = (T)distr_i(eng);
             }
         }
         else
         {
             for (int i = 0; i < count; i++)
             {
-                tensor_data[i] = distr_f(eng);
+                tensor_data[i] = (T)distr_f(eng);
             }
         }
+        return;
     }
 
     int loadRandomDataToModelTensor(ModelTensorAttr tensor_attr, ModelTensor* tensor)
@@ -97,7 +97,7 @@ namespace TRITON_SERVER
         std::default_random_engine eng(rd());
         int element_count = tensorElementCount(tensor_attr);
         int element_size = tensorElementSize(tensor_attr);
-        uint8_t* tensor_data = (uint8_t*)aligned_alloc(ALIAN_SIZE, element_count * aligned_size);
+        uint8_t* tensor_data = (uint8_t*)aligned_alloc(ALIAN_SIZE, element_count * element_size);
         if (nullptr == tensor_data)
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "malloc memory buffer for tensor {} fail", 
@@ -142,7 +142,7 @@ namespace TRITON_SERVER
             }
         }
         tensor->buf = tensor_data;
-        tensor->size = element_count * aligned_size;
+        tensor->size = element_count * element_size;
         tensor->type = tensor_attr.type;
         return 0;
     }
@@ -298,10 +298,15 @@ namespace TRITON_SERVER
             tensor_index = std::type_index(typeid(uint64_t));
         else
         {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unsupported tensor data type: {}", getTypeString(m_type));
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} data type: {} not supported", 
+                &tensor_attr.name[0], getTypeString(tensor_attr.type));
             return -1;
         }
-        std::vector<npy::ndarray_len_t> shape_v(m_shape.begin(), m_shape.end());
+        std::vector<npy::ndarray_len_t> shape_v;
+        for (auto i = 0; i < tensor_attr.num_dim; i++)
+        {
+            shape_v.push_back(tensor_attr.dims[i]);
+        }
         bool fortran_order = false;
         npy::dtype_t dtype = npy::dtype_map.at(tensor_index);
         npy::header_t header{ dtype, fortran_order, shape_v };
@@ -312,10 +317,10 @@ namespace TRITON_SERVER
         {
             size_t curr_pos = stream.tellp();
             size_t write_len = curr_pos - before;
-            if (m_data_len != write_len)
+            if (tensor->size != write_len)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "expect write {} bytes, actually write {} bytes to file {}",
-                    m_data_len, write_len, file_name);
+                    tensor->size, write_len, file_name);
                 return -1;
             }
         }
