@@ -31,7 +31,7 @@ namespace TRITON_SERVER
     int loadRandomDataToModelTensor(ModelTensorAttr tensor_attr, ModelTensor* tensor);
     int loadStbDataToModelTensor(const std::string file_name, ModelTensor* tensor);
     int loadNpyDataToModelTensor(const std::string file_name, ModelTensor* tensor);
-    int saveModelTensorToNpyFile(const std::string file_name, ModelTensor* tensor);
+    int saveModelTensorToNpyFile(const std::string file_name, ModelTensorAttr tensor_attr, ModelTensor* tensor);
     void releaseModelTensor(ModelTensor* tensor);
 
 } // namespace TRITON_SERVER

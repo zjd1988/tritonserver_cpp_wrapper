@@ -95,6 +95,7 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
 
 int main(int argc, char* argv[])
 {
+    int index = 0;
     std::string file_type;
     CmdLineArgOption cmd_option;
     ModelContext model_context = nullptr;
@@ -165,21 +166,28 @@ int main(int argc, char* argv[])
     // load input files
     if (0 == cmd_option.input_files.size())
     {
-        for (auto i = 0; i < input_output_num.n_input; i++)
+        for (index = 0; index < input_output_num.n_input; index++)
         {
-            if(0 != loadRandomDataToModelTensor(input_attrs[i], &tensor))
+            if(0 != loadRandomDataToModelTensor(input_attrs[index], &tensor))
             {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from number:{} tensor attr fail", i);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from number:{} tensor attr fail", index);
                 break;
             }
+            tensor.index = index;
+            input_tensors.push_back(tensor);
         }
     }
     else
     {
-        for (auto i = 0; i < cmd_option.input_files.size(); i++)
+        for (index = 0; index < cmd_option.input_files.size(); index++)
         {
             fs::path file_path = cmd_option.input_files[i];
             file_type = file_path.extension().string();
+            if (!fs::exists(file_path))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "file {} not exists", file_path.string());
+                break;
+            }
             if (file_type == "jpg" || file_type == "bmp" || file_type == "png")
             {
                 if (0 != loadStbDataToModelTensor(file_path.string(), &tensor))
@@ -201,6 +209,7 @@ int main(int argc, char* argv[])
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unsupported file type {}", file_path.string());
                 break;
             }
+            tensor.index = index;
             input_tensors.push_back(tensor);
         }
     }
@@ -235,6 +244,22 @@ int main(int argc, char* argv[])
         goto FINAL;
     }
 
+    // save output
+    if (cmd_option.output_flag)
+    {
+        for (index = 0; index < output_tensors.size(); index++)
+        {
+            std::string tensor_name = std::string(output_attrs[index].name);
+            std::string output_file = tensor_name + ".npy";
+            if (saveModelTensorToNpyFile(output_file, output_attrs[index], &output_tensors[index]))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "save tensor {} to file {} fail", 
+                    tensor_name, output_file);
+                break;
+            }
+        }
+    }
+
     // release outputs
     if (0 != modelOutputsRelease(model_context, input_output_num.n_output, &output_tensors[0]))
     {
@@ -244,9 +269,9 @@ int main(int argc, char* argv[])
 
 FINAL:
     // release input tensor buf
-    for (auto i = 0; i < input_tensors.size(); i++)
+    for (index = 0; index < input_tensors.size(); index++)
     {
-        releaseModelTensor(input_tensors[i]);
+        releaseModelTensor(input_tensors[index]);
     }
     // destroy model context
     modelDestroy();
