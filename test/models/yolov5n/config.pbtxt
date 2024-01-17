@@ -1,0 +1,35 @@
+name: "yolov5n"
+backend: "onnxruntime"
+input [
+  {
+    name: "images"
+    data_type: TYPE_FP32
+    dims: [ 1, 3, 640, 640 ],
+  }
+]
+output [
+  {
+    name: "output0"
+    data_type: TYPE_FP32
+    dims: [ 1, 255, 80, 80 ]
+  },
+  {
+    name: "343"
+    data_type: TYPE_FP32
+    dims: [ 1, 255, 40, 40 ]
+  },
+  {
+    name: "345"
+    data_type: TYPE_FP32
+    dims: [ 1, 255, 20, 20 ]
+  }
+]
+
+instance_group [ 
+  { 
+    count: 1
+    kind: KIND_GPU
+    gpus: [ 0 ]
+  }
+]
+

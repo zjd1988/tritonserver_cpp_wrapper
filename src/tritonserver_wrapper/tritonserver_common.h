@@ -184,7 +184,7 @@ inline static const char* getTypeString(TensorDataType type)
 
 TRITONSERVER_API ServerConfig defaultServerConfig(const char* model_repository_path, 
     LogVerboseLevel log_verbose_level = LOG_VERBOSE_LEVEL_0, const char* log_file = "", 
-    const char* backend_dir = "", const char* repo_agent_dir = "");
+    const char* backend_dir = "", const char* repo_agent_dir = "/opt/tritonserver/repoagents/");
 
 TRITONSERVER_API int initTritonServerWithCustom(const ServerConfig* config);
 

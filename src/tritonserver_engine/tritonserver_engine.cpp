@@ -599,7 +599,7 @@ namespace TRITON_SERVER
                 FAIL_IF_ERR(TRITONSERVER_MessageSerializeToJson(model_metadata_message, &model_metadata_buffer, &model_metadata_byte_size),
                     "unable to serialize model metadata");
 
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_WARN, "model {}:{} metadata:\n{}", 
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model {}:{} metadata:\n{}", 
                     model_name, model_version, model_metadata_buffer);
 
                 // parse model metadata json
@@ -682,7 +682,7 @@ namespace TRITON_SERVER
             FAIL_IF_ERR(TRITONSERVER_MessageSerializeToJson(model_metadata_message, &model_metadata_buffer, &model_metadata_byte_size),
                 "unable to serialize model metadata");
 
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_WARN, "model {}:{} metadata:\n{}", 
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model {}:{} metadata:\n{}", 
                 model_name, model_version, model_metadata_buffer);
 
             // parse model metadata json
@@ -775,11 +775,14 @@ namespace TRITON_SERVER
             {
                 FAIL("unable to get output name for model " + model_key);
             }
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "parse {} tensor {}", model_key, cname);
+
             std::string output_name(output_attrs[idx].name);
             std::string name(cname);
             if (name != output_name)
             {
-                FAIL("unexpected output '" + name + "' for model " + model_key);
+                FAIL("expected output '" + output_name + "' for model " + model_key + 
+                    ", but get " + name);
             }
 
             TRITONSERVER_DataType expected_datatype = (TRITONSERVER_DataType)output_attrs[idx].type;

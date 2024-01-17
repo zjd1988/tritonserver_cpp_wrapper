@@ -24,6 +24,7 @@ namespace TRITON_SERVER
         // common
         std::string                    model_repo_path;
         std::string                    backends_path;
+        std::string                    repo_agent_path;
         int                            log_verbose_level;
         bool                           help_flag = false;
     } CmdLineArgOption;

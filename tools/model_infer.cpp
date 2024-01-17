@@ -29,7 +29,10 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
             cxxopts::value<std::string>()->default_value("/models"))
         // backend path
         ("backends_path", "Backends path for triton server", 
-            cxxopts::value<std::string>()->default_value("/opt/trtionserver/backends"))
+            cxxopts::value<std::string>()->default_value("/opt/tritonserver/backends"))
+        // repo agent dir
+        ("repo_agent_path", "repo agent path for triton server", 
+            cxxopts::value<std::string>()->default_value("/opt/tritonserver/repoagents"))
         // log level, default is info level
         ("log_level", "Log verbose level for triton server", cxxopts::value<int>()->default_value("0"))
         // help
@@ -83,8 +86,11 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
     if (0 != parse_result.count("output"))
         arg_opt.output_flag = true;
 
+    // 7 check triton server config
+    arg_opt.model_repo_path = parse_result["model_repo_path"].as<std::string>();
+    arg_opt.backends_path = parse_result["backends_path"].as<std::string>();
+    arg_opt.repo_agent_path = parse_result["repo_agent_path"].as<std::string>();
 
-    // 7 check log arg
     // LOG_VERBOSE_LEVEL_0 = 0,
     // LOG_VERBOSE_LEVEL_1,
     // LOG_VERBOSE_LEVEL_2,
@@ -118,13 +124,16 @@ int main(int argc, char* argv[])
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "            output flag: {}", cmd_option.output_flag);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        model repo path: {}", cmd_option.model_repo_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          backends path: {}", cmd_option.backends_path);
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        repo agent path: {}", cmd_option.repo_agent_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      log verbose level: {}", cmd_option.log_verbose_level);
 
     // get triton server config
     ServerConfig config = defaultServerConfig(cmd_option.model_repo_path.c_str(), 
-        (LogVerboseLevel)cmd_option.log_verbose_level, "", cmd_option.backends_path.c_str(), "");
+        (LogVerboseLevel)cmd_option.log_verbose_level, "", cmd_option.backends_path.c_str(), 
+        cmd_option.repo_agent_path.c_str());
 
     // start triton server with config
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "1 start triton server with config");
     if (0 != initTritonServerWithCustom(&config))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "init triton server fail");
@@ -132,6 +141,7 @@ int main(int argc, char* argv[])
     }
 
     // init model context
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "2 init model context");
     if (0 != initModel(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "init model context fail");
@@ -139,6 +149,7 @@ int main(int argc, char* argv[])
     }
 
     // query model input output num
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "3 query model input output num");
     if (0 != modelQuery(model_context, MODEL_QUERY_IN_OUT_NUM, &input_output_num, sizeof(ModelInputOutputNum)))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input output number fail");
@@ -146,6 +157,7 @@ int main(int argc, char* argv[])
     }
 
     // query model input tensor attr
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "4 query model input tensor attr");
     input_attrs.resize(input_output_num.n_input);
     if (0 != modelQuery(model_context, MODEL_QUERY_INPUT_ATTR, &input_attrs[0], 
         input_output_num.n_input * sizeof(input_attrs[0])))
@@ -153,8 +165,19 @@ int main(int argc, char* argv[])
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input tensor attr fail");
         goto FINAL;
     }
+    for (index = 0; index < input_output_num.n_input; index++)
+    {
+        std::vector<int64_t> tensor_shape(&input_attrs[index].dims[0], 
+            &input_attrs[index].dims[0] + input_attrs[index].num_dim);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", input_attrs[index].index);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &input_attrs[index].name[0]);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(input_attrs[index].type));
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
+    }
 
     // query model output tensor attr
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "5 query model output tensor attr");
     output_attrs.resize(input_output_num.n_output);
     if (0 != modelQuery(model_context, MODEL_QUERY_OUTPUT_ATTR, &output_attrs[0], 
         input_output_num.n_output * sizeof(output_attrs[0])))
@@ -162,8 +185,19 @@ int main(int argc, char* argv[])
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model output tensor attr fail");
         goto FINAL;
     }
+    for (index = 0; index < input_output_num.n_output; index++)
+    {        
+        std::vector<int64_t> tensor_shape(&output_attrs[index].dims[0], 
+            &output_attrs[index].dims[0] + output_attrs[index].num_dim);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", output_attrs[index].index);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &output_attrs[index].name[0]);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(output_attrs[index].type));
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
+    }
 
     // load input files
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 load input files");
     if (0 == cmd_option.input_files.size())
     {
         for (index = 0; index < input_output_num.n_input; index++)
@@ -215,6 +249,7 @@ int main(int argc, char* argv[])
     }
 
     // check model input number equalt to input files number
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "7 check model input number equalt to input files number");
     if (input_output_num.n_input != input_tensors.size())
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model expect inputs number:{}, but get input tensors number:{}",
@@ -223,13 +258,15 @@ int main(int argc, char* argv[])
     }
 
     // set model inputs
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "8 set model inputs");
     if (0 != modelInputsSet(model_context, input_output_num.n_input, &input_tensors[0]))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inputs set fail");
         goto FINAL;
     }
 
-    // mode run
+    // model run
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "9 model run");
     if (0 != modelRun(model_context))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model run fail");
@@ -237,6 +274,7 @@ int main(int argc, char* argv[])
     }
 
     // get model output
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "10 get model output");
     output_tensors.resize(input_output_num.n_output);
     if (0 != modelOutputsGet(model_context, input_output_num.n_output, &output_tensors[0]))
     {
@@ -244,7 +282,8 @@ int main(int argc, char* argv[])
         goto FINAL;
     }
 
-    // save output
+    // save model output
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "11 save model output");
     if (cmd_option.output_flag)
     {
         for (index = 0; index < output_tensors.size(); index++)
@@ -260,7 +299,8 @@ int main(int argc, char* argv[])
         }
     }
 
-    // release outputs
+    // release model outputs
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "12 release model outputs");
     if (0 != modelOutputsRelease(model_context, input_output_num.n_output, &output_tensors[0]))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model outputs release fail");
@@ -269,15 +309,19 @@ int main(int argc, char* argv[])
 
 FINAL:
     // release input tensor buf
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "13 release input tensor buf");
     for (index = 0; index < input_tensors.size(); index++)
     {
         releaseModelTensor(&input_tensors[index]);
     }
+
     // destroy model context
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "14 destroy model context");
     modelDestroy(model_context);
     model_context = nullptr;
 
     // uninit triton server
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "15 uninit triton server");
     uninitTritonServer();
     return 0;
 }

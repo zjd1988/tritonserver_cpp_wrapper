@@ -14,7 +14,7 @@ TRITONSERVER_API int initModel(ModelContext* context, const char* model_name, in
 {
     *context = nullptr;
     std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version));
-    if (nullptr == model_inst.get() || model_inst->status())
+    if (nullptr == model_inst.get() || false == model_inst->status())
         return -1;
     *context = (ModelContext)model_inst.release();
     return 0;

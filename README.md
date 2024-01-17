@@ -20,6 +20,11 @@ docker run -it --gpus="device=0" -v $PWD:/workspace/tritonserver_wrapper \
 cd /workspace/tritonserver_cpp_wrapper
 mkdir build && cd build
 cmake .. && make -j4
+
+<!-- mobilenetv2 model test -->
+./model_infer --name mobilenetv2 --version 1 --model_repo_path /workspace/tritonserver_wrapper/test/models/
+
+<!-- yolov5n model test -->
+./model_infer --name yolov5n --version 1 --model_repo_path /workspace/tritonserver_wrapper/test/models/
+
 ```
-
-
