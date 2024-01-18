@@ -38,6 +38,10 @@ namespace TRITON_SERVER
 
     #define TRITON_SERVER_INIT(config) TRITON_SERVER::TritonServerEngine::Instance().init(config)
 
+    #define TRITON_SERVER_LOAD_MODEL(model_name) TRITON_SERVER::TritonServerEngine::Instance().loadModel(model_name)
+
+    #define TRITON_SERVER_UNLOAD_MODEL(model_name) TRITON_SERVER::TritonServerEngine::Instance().unloadModel(model_name)
+
     #define TRITON_SERVER_INFER(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator) \
         TRITON_SERVER::TritonServerEngine::Instance().infer(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator)
 
@@ -61,6 +65,10 @@ namespace TRITON_SERVER
         int getModelInfo(const std::string model_name, const int64_t model_version, 
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
 
+        // load/unload model by name
+        int loadModel(const std::string model_name);
+        int unloadModel(const std::string model_name);
+
     private:
         TritonServerEngine() = default;
         ~TritonServerEngine() = default;
@@ -71,8 +79,17 @@ namespace TRITON_SERVER
             std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors);
 
     private:
-        std::string                                                 m_model_repository_path;
-        int32_t                                                     m_verbose_level;
+        // triton server option
+        std::string                                                 m_model_repository_path; // model repository dir
+        int32_t                                                     m_verbose_level;         // log verbose level
+        TRITONSERVER_LogFormat                                      m_log_format;            // log format
+        std::string                                                 m_log_file_path;         // absolute log file path
+        TRITONSERVER_ModelControlMode                               m_model_control;         // model control, NONE/POLL/EXPLICIT
+        bool                                                        m_strict_model;          // strict config model
+        std::string                                                 m_backend_dir;           // triton server backends dir
+        std::string                                                 m_repo_agent_dir;        // triton server repo agent dir
+        int                                                         m_check_timeout;         // triton server check ready timeout
+        // triton server
         std::shared_ptr<TRITONSERVER_Server>                        m_server;
     };
 

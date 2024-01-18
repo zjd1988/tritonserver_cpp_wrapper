@@ -191,6 +191,10 @@ TRITONSERVER_API int initTritonServerWithCustom(const ServerConfig* config);
 TRITONSERVER_API int initTritonServerWithDefault(const char* model_repository_path, 
     LogVerboseLevel log_verbose_level = LOG_VERBOSE_LEVEL_0);
 
+TRITONSERVER_API int tritonServerLoadModel(const char* model_name);
+
+TRITONSERVER_API int tritonServerUnloadModel(const char* model_name);
+
 TRITONSERVER_API void uninitTritonServer();
 
 #ifdef __cplusplus

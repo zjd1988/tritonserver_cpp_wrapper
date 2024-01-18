@@ -461,13 +461,21 @@ namespace TRITON_SERVER
         if (config->log_file_path)
             log_file = config->log_file_path;
 
-        m_model_repository_path = model_repository_path;
-        m_verbose_level = verbose_level;
         std::string backend_dir = config->backend_dir;
         std::string repo_agent_dir = config->repo_agent_dir;
         int timeout = config->check_timeout;
         TRITONSERVER_ModelControlMode model_control = (TRITONSERVER_ModelControlMode)config->model_control;
         bool strict_model = config->strict_model;
+
+        m_model_repository_path = model_repository_path;   // model repository dir
+        m_verbose_level = verbose_level;                   // log verbose level
+        m_log_format = log_format;                         // log format
+        m_log_file_path = log_file;                        // absolute log file path
+        m_model_control = model_control;                   // model control, NONE/POLL/EXPLICIT
+        m_strict_model = strict_model;                     // strict config model
+        m_backend_dir = backend_dir;                       // triton server backends dir
+        m_repo_agent_dir = repo_agent_dir;                 // triton server repo agent dir
+        m_check_timeout = timeout;                         // triton server check ready timeout
 
         TRITONSERVER_ServerOptions* server_options = nullptr;
         FAIL_IF_ERR(TRITONSERVER_ServerOptionsNew(&server_options), 
@@ -630,7 +638,7 @@ namespace TRITON_SERVER
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model {}:{} info", model_name, model_version);
         if (nullptr == m_server.get())
         {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init");
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
             return -1;
         }
 
@@ -947,6 +955,30 @@ namespace TRITON_SERVER
                 "deleting response allocator for model " + model_key);
         }
 
+        return 0;
+    }
+
+    int TritonServerEngine::loadModel(const std::string model_name)
+    {
+        if (nullptr == m_server.get())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
+            return -1;
+        }
+        LOG_IF_ERR(TRITONSERVER_ServerLoadModel(m_server.get(), model_name.c_str()), 
+            "load model " + model_name + " fail");
+        return 0;
+    }
+
+    int TritonServerEngine::unloadModel(const std::string model_name)
+    {
+        if (nullptr == m_server.get())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
+            return -1;
+        }
+        LOG_IF_ERR(TRITONSERVER_ServerUnloadModel(m_server.get(), model_name.c_str()), 
+            "unload model " + model_name + " fail");
         return 0;
     }
 
