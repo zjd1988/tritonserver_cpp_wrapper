@@ -1,4 +1,4 @@
-# convert image to npy
+# 1 convert image to npy
 
 ## convert mobilenetv2 model test img
 ```
@@ -10,6 +10,7 @@ python convert.py --input ./images/bell.jpg --resize 224 224 --mean 123.675 116.
 python convert.py --input ./images/bus.jpg --resize 640 640 --mean 0 0 0 --std 255 255 255 --output ./data/bus.npy --bgr2rgb
 ```
 
+# 2 model postprocess
 ## mobilenetv2 postprcess 
 ```
 <!-- run model get model output -->
@@ -47,4 +48,4 @@ Detection result save to ./yolov5n_result.jpg
 
 ```
 ### yolov5n result
-![yolov5n测试结果](https://github.com/zjd1988/tritonserver_cpp_wrapper/tree/main/test/images/yolov5n_result.jpg)
+![yolov5n测试结果](https://github.com/zjd1988/tritonserver_cpp_wrapper/blob/main/test/images/yolov5n_result.jpg)
