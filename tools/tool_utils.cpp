@@ -226,7 +226,7 @@ namespace TRITON_SERVER
         TensorDataType tensor_dtype = TENSOR_TYPE_UINT8;
         if (std::type_index(typeid(float)) == type_index)
             tensor_dtype = TENSOR_TYPE_FP32;
-        if (std::type_index(typeid(double)) == type_index)
+        else if (std::type_index(typeid(double)) == type_index)
             tensor_dtype = TENSOR_TYPE_FP64;
         else if (std::type_index(typeid(int64_t)) == type_index)
             tensor_dtype = TENSOR_TYPE_INT64;

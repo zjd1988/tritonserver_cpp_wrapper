@@ -58,5 +58,5 @@ if __name__ == "__main__":
     std = np.array(args.std).reshape((3,1,1))
     mean = np.array(args.mean).reshape((3,1,1))
     norm_np = (chw_np - mean) / std
-    output_np = np.expand_dims(norm_np, 0).astype(np.float)
+    output_np = np.expand_dims(norm_np, 0).astype(np.float32)
     np.save(args.output, output_np)

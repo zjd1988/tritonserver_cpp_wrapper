@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "file {} not exists", file_path.string());
                 break;
             }
-            if (file_type == "jpg" || file_type == "bmp" || file_type == "png")
+            if (file_type == ".jpg" || file_type == ".bmp" || file_type == ".png")
             {
                 if (0 != loadStbDataToModelTensor(file_path.string(), &tensor))
                 {
@@ -230,7 +230,7 @@ int main(int argc, char* argv[])
                     break;
                 }
             }
-            else if (file_type == "npy")
+            else if (file_type == ".npy")
             {
                 if (0 != loadNpyDataToModelTensor(file_path.string(), &tensor))
                 {
