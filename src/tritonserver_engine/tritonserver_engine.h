@@ -17,7 +17,7 @@ namespace TRITON_SERVER
     class TritonTensor : public NonCopyable
     {
     public:
-        TritonTensor(TRITONSERVER_DataType dtype, const std::vector<int64_t>& shape, void* data = nullptr);
+        TritonTensor(const TRITONSERVER_DataType dtype, const std::vector<int64_t>& shape, void* data = nullptr);
         ~TritonTensor();
 
         TRITONSERVER_DataType dataType() const { return m_dtype; }
@@ -38,8 +38,8 @@ namespace TRITON_SERVER
 
     #define TRITON_SERVER_INIT(config) TRITON_SERVER::TritonServerEngine::Instance().init(config)
 
-    #define TRITON_SERVER_INFER(model_info, inputs, outputs) \
-        TRITON_SERVER::TritonServerEngine::Instance().infer(model_info, inputs, outputs)
+    #define TRITON_SERVER_INFER(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator) \
+        TRITON_SERVER::TritonServerEngine::Instance().infer(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator)
 
     #define TRITON_SERVER_UNINIT() TRITON_SERVER::TritonServerEngine::Instance().uninit()
 
@@ -51,11 +51,12 @@ namespace TRITON_SERVER
         void uninit();
         void* createResponseAllocator();
         void destroyResponseAllocator(void* allocator);
-        int infer(const std::string model_name, const std::string model_version, 
+        int infer(const std::string model_name, 
+            const int64_t model_version, 
             const std::vector<ModelTensorAttr>& input_attrs, 
             const std::vector<ModelTensorAttr>& output_attrs, 
-            const std::vector<std::shared_ptr<TritonTensor>>& input_tensors, 
-            std::vector<std::shared_ptr<TritonTensor>>& output_tensors, 
+            const std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors, 
+            std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, 
             void* response_allocator = nullptr);
         int getModelInfo(const std::string model_name, const int64_t model_version, 
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
@@ -65,9 +66,9 @@ namespace TRITON_SERVER
         ~TritonServerEngine() = default;
 
         void parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
-            const std::string model_name, const std::string model_version, 
-            const std::vector<ModelTensorAttr>& output_attrs, 
-            std::vector<std::shared_ptr<TritonTensor>>& output_tensors);
+            const std::string model_name, const int64_t model_version, 
+            const std::map<std::string, ModelTensorAttr>& output_attrs, 
+            std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors);
 
     private:
         std::string                                                 m_model_repository_path;

@@ -5,6 +5,7 @@
  * @LastEditors: zjd
  ********************************************/
 #include <stdio.h>
+#include <set>
 #include <memory>
 #include <future>
 #include <sstream>
@@ -117,7 +118,7 @@ namespace TRITON_SERVER
             return TRITONSERVER_TYPE_INVALID;
     }
 
-    TritonTensor::TritonTensor(TRITONSERVER_DataType dtype, const std::vector<int64_t>& shape, void* data)
+    TritonTensor::TritonTensor(const TRITONSERVER_DataType dtype, const std::vector<int64_t>& shape, void* data)
     {
         if (TRITONSERVER_TYPE_INVALID == m_dtype)
         {
@@ -740,18 +741,18 @@ namespace TRITON_SERVER
     }
 
     void TritonServerEngine::parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
-        const std::string model_name, const std::string model_version, 
-        const std::vector<ModelTensorAttr>& output_attrs, 
-        std::vector<std::shared_ptr<TritonTensor>>& output_tensors)
+        const std::string model_name, const int64_t model_version, 
+        const std::map<std::string, ModelTensorAttr>& expect_outputs, 
+        std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors)
     {
-        std::string model_key = model_name + ":" + model_version;
+        std::string model_key = model_name + ":" + std::to_string(model_version);
         // get model output count
         uint32_t output_count;
         FAIL_IF_ERR(TRITONSERVER_InferenceResponseOutputCount(response, &output_count),
             "getting number of response outputs for model " + model_key);
-        if (output_count != output_attrs.size())
+        if (output_count != expect_outputs.size())
         {
-            FAIL("expecting " + std::to_string(output_attrs.size()) + " response outputs, got " + 
+            FAIL("expecting " + std::to_string(expect_outputs.size()) + " response outputs, got " + 
                 std::to_string(output_count) + " for model " + model_key);
         }
 
@@ -777,19 +778,17 @@ namespace TRITON_SERVER
             }
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "parse {} tensor {}", model_key, cname);
 
-            std::string output_name(output_attrs[idx].name);
             std::string name(cname);
-            if (name != output_name)
+            if (expect_outputs.end() == expect_outputs.find(name))
             {
-                FAIL("expected output '" + output_name + "' for model " + model_key + 
-                    ", but get " + name);
+                FAIL("output " + name + " not in output tensor attr for model " + model_key);
             }
 
-            TRITONSERVER_DataType expected_datatype = (TRITONSERVER_DataType)output_attrs[idx].type;
+            TRITONSERVER_DataType expected_datatype = (TRITONSERVER_DataType)expect_outputs.at(name).type;
             if (datatype != expected_datatype)
             {
-                FAIL("unexpected datatype '" + std::string(TRITONSERVER_DataTypeString(datatype)) + "' for '" +
-                    name + "' , model " + model_key);
+                FAIL("output " + name + " have unexpected datatype " + 
+                    std::string(TRITONSERVER_DataTypeString(datatype)) + " for model " + model_key);
             }
 
             // parepare output tensor
@@ -797,7 +796,7 @@ namespace TRITON_SERVER
             std::shared_ptr<TritonTensor> output_tensor(new TritonTensor(datatype, tensor_shape));
             if (nullptr == output_tensor.get() || nullptr == output_tensor->base<void>())
             {
-                FAIL("malloc tensor fail for output " + name + " ,model " + model_key);
+                FAIL("malloc buff to output " + name + " fail for model " + model_key);
             }
             // We make a copy of the data here... which we could avoid for
             // performance reasons but ok for this simple example.
@@ -833,25 +832,26 @@ namespace TRITON_SERVER
                 default:
                     FAIL("unexpected memory type for model " + model_key);
             }
-            output_tensors.push_back(output_tensor);
+            output_tensors[name] = output_tensor;
         }
         return;
     }
 
-    int TritonServerEngine::infer(const std::string model_name, const std::string model_version, 
+    int TritonServerEngine::infer(const std::string model_name, const int64_t model_version, 
         const std::vector<ModelTensorAttr>& input_attrs, 
         const std::vector<ModelTensorAttr>& output_attrs, 
-        const std::vector<std::shared_ptr<TritonTensor>>& input_tensors, 
-        std::vector<std::shared_ptr<TritonTensor>>& output_tensors,
+        const std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors, 
+        std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, 
         void* response_allocator)
     {
         output_tensors.clear();
-        std::string model_key = model_name + ":" + model_version;
+        std::string model_key = model_name + ":" + std::to_string(model_version);
         // check input tensors size equal to model inputs
         if (input_tensors.size() != input_attrs.size())
         {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input tensors size:{} not equal to "
-                "model {} input tensors size:{}", input_tensors.size(), model_key, input_attrs.size());
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input tensors size:{} not equal to"
+                " input tensors attr size:{} for model {}", input_tensors.size(), 
+                model_key, input_attrs.size(), model_key);
             return -1;
         }
         // When triton needs a buffer to hold an output tensor, it will ask
@@ -872,13 +872,9 @@ namespace TRITON_SERVER
         // Create an inference request object. The inference request object
         // is where we set the name of the model we want to use for
         // inference and the input tensors.
-        std::stringstream ss;
-        int64_t model_version_int;
-        ss << model_version;
-        ss >> model_version_int;
         TRITONSERVER_InferenceRequest* irequest = nullptr;
-        FAIL_IF_ERR(TRITONSERVER_InferenceRequestNew(&irequest, m_server.get(), model_name.c_str(), model_version_int),
-            "creating inference request, model " + model_key);
+        FAIL_IF_ERR(TRITONSERVER_InferenceRequestNew(&irequest, m_server.get(), model_name.c_str(), model_version),
+            "creating inference request for model " + model_key);
 
         std::unique_ptr<std::promise<void>> barrier = std::make_unique<std::promise<void>>();
         FAIL_IF_ERR(TRITONSERVER_InferenceRequestSetReleaseCallback(irequest, InferRequestRelease,
@@ -888,25 +884,27 @@ namespace TRITON_SERVER
         // Add the model inputs to the request...
         for (size_t i = 0; i < input_attrs.size(); i++)
         {
-            std::string input_name = std::string(input_attrs[i].name);
-            std::vector<int64_t> input_shape = input_tensors[i]->shape();
-            TRITONSERVER_DataType datatype = input_tensors[i]->dataType();
-            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAddInput(irequest, input_name.c_str(), 
-                datatype, &input_shape[0], input_shape.size()),
-                "setting input: " + input_name + " meta-data for the request, model " + model_key);
-            size_t input_size = input_tensors[i]->byteSize();
-            const void* input_base = input_tensors[i]->base<void>();
-            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(irequest, input_name.c_str(), input_base, input_size, 
+            std::string tensor_name = std::string(input_attrs[i].name);
+            std::vector<int64_t> input_shape = input_tensors.at(tensor_name)->shape();
+            TRITONSERVER_DataType datatype = input_tensors.at(tensor_name)->dataType();
+            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAddInput(irequest, tensor_name.c_str(), 
+                datatype, &input_shape[0], input_shape.size()), "assigning input: " + tensor_name + 
+                " meta-data to request for model " + model_key);
+            size_t input_size = input_tensors.at(tensor_name)->byteSize();
+            const void* input_base = input_tensors.at(tensor_name)->base<void>();
+            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(irequest, tensor_name.c_str(), input_base, input_size, 
                 TRITONSERVER_MEMORY_CPU, 0 /* memory_type_id */),
-                "assigning input: " + input_name + " data for request for " + model_key);
+                "assigning input: " + tensor_name + " data to request for model " + model_key);
         }
 
         // Add the model outputs to the request...
+        std::map<std::string, ModelTensorAttr> expected_outputs;
         for (size_t i = 0; i < output_attrs.size(); i++)
         {
-            std::string output_name = std::string(output_attrs[i].name);
-            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAddRequestedOutput(irequest, output_name.c_str()),
-                "requesting output: " + output_name + " for the request");
+            std::string tensor_name = std::string(output_attrs[i].name);
+            FAIL_IF_ERR(TRITONSERVER_InferenceRequestAddRequestedOutput(irequest, tensor_name.c_str()), 
+                "assigning output: " + tensor_name + " to request for model " + model_key);
+            expected_outputs[tensor_name] = output_attrs[i];
         }
 
         // Perform inference by calling TRITONSERVER_ServerInferAsync. This
@@ -932,7 +930,7 @@ namespace TRITON_SERVER
                 "response status for model " + model_key);
 
             // parse model infer output from response
-            parseModelInferResponse(completed_response, model_name, model_version, output_attrs, output_tensors);
+            parseModelInferResponse(completed_response, model_name, model_version, expected_outputs, output_tensors);
 
             // delete model infer response
             FAIL_IF_ERR(TRITONSERVER_InferenceResponseDelete(completed_response), 

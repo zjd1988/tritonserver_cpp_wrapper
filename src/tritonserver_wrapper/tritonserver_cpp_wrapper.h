@@ -5,6 +5,7 @@
  * @LastEditors: zjd
  ********************************************/
 #pragma once
+#include <map>
 #include <vector>
 #include <memory>
 #include <string>
@@ -30,16 +31,14 @@ namespace TRITON_SERVER
         int outputsRelease(uint32_t n_outputs, ModelTensor* outputs);
 
     private:
-        std::string                                       m_model_name;
-        int64_t                                           m_model_version;
-        bool                                              m_model_status = false;
-        std::vector<ModelTensorAttr>                      m_model_input_attrs;
-        std::vector<ModelTensorAttr>                      m_model_output_attrs;
-        // std::vector<ModelTensor>                          m_input_tensors;
-        // std::vector<ModelTensor>                          m_output_tensors;
-        std::vector<std::shared_ptr<TritonTensor>>        m_input_tensors;
-        std::vector<std::shared_ptr<TritonTensor>>        m_output_tensors;
-        void*                                             m_response_allcator = nullptr;
+        std::string                                               m_model_name;
+        int64_t                                                   m_model_version;
+        bool                                                      m_model_status = false;
+        std::vector<ModelTensorAttr>                              m_model_input_attrs;
+        std::vector<ModelTensorAttr>                              m_model_output_attrs;
+        std::map<std::string, std::shared_ptr<TritonTensor>>      m_input_tensors;
+        std::map<std::string, std::shared_ptr<TritonTensor>>      m_output_tensors;
+        void*                                                     m_response_allcator = nullptr;
     };
 
 } // namespace TRITON_SERVER

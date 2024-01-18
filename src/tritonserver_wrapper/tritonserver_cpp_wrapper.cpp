@@ -50,6 +50,10 @@ namespace TRITON_SERVER
 
     TritonModel::~TritonModel()
     {
+        m_model_input_attrs.clear();
+        m_model_output_attrs.clear();
+        m_input_tensors.clear();
+        m_output_tensors.clear();
         if (nullptr != m_response_allcator)
         {
             TritonServerEngine::Instance().destroyResponseAllocator(m_response_allcator);
@@ -119,28 +123,6 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    // int TritonModel::inputsSet(uint32_t n_inputs, ModelTensor* inputs)
-    // {
-    //     if (false == m_model_status)
-    //     {
-    //         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model status is false");
-    //         return -1;
-    //     }
-    //     m_input_tensors.clear();
-    //     if (0 >= n_inputs)
-    //     {
-    //         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model input tensor number:{} is invalid", n_inputs);
-    //         return -1;
-    //     }
-    //     if (nullptr == inputs)
-    //     {
-    //         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model input tensor is nullptr");
-    //         return -1;
-    //     }
-    //     memcpy(&m_input_tensors[0], inputs, sizeof(ModelTensor) * n_inputs);
-    //     return 0;
-    // }
-
     int TritonModel::inputsSet(uint32_t n_inputs, ModelTensor* inputs)
     {
         m_input_tensors.clear();
@@ -159,29 +141,36 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model input tensor is nullptr");
             return -1;
         }
-        m_input_tensors.resize(n_inputs);
+        if (n_inputs != m_model_input_attrs.size())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input tensor number:{} not equal to tensor attr number:{}", 
+                n_inputs, m_model_input_attrs.size());
+            return -1;
+        }
+
         for (uint32_t i = 0; i < n_inputs; i++)
         {
             ModelTensor* model_tensor = inputs + i;
             uint32_t index =  model_tensor->index;
+            const auto& tensor_attr = m_model_input_attrs[index];
+            std::string tensor_name = std::string(tensor_attr.name);
             // check input datatype
             TRITONSERVER_DataType dtype = (TRITONSERVER_DataType)model_tensor->type;
-            TRITONSERVER_DataType expect_dtype = (TRITONSERVER_DataType)m_model_input_attrs[index].type;
+            TRITONSERVER_DataType expect_dtype = (TRITONSERVER_DataType)tensor_attr.type;
             if (dtype != expect_dtype)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} expect datatype:{} but get {}", 
-                    index, getTypeString(m_model_input_attrs[index].type), getTypeString(model_tensor->type));
+                    tensor_name, getTypeString(tensor_attr.type), getTypeString(model_tensor->type));
                 return -1;
             }
-            // get expect shape
-            uint32_t num_dim = m_model_input_attrs[index].num_dim;
-            std::vector<int64_t> expect_shape(&m_model_input_attrs[index].dims[0], 
-                &m_model_input_attrs[index].dims[0] + num_dim);
+            // construct tensor with datatype/shape/data
+            uint32_t num_dim = tensor_attr.num_dim;
+            std::vector<int64_t> expect_shape(&tensor_attr.dims[0], &tensor_attr.dims[0] + num_dim);
             void* data = model_tensor->buf;
             std::shared_ptr<TritonTensor> triton_tensor(new TritonTensor(expect_dtype, expect_shape, data));
             if (nullptr == triton_tensor.get())
             {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "construct tensor:{} fail", index);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "construct tensor:{} fail", tensor_name);
                 return -1;
             }
             // check input data size 
@@ -189,10 +178,10 @@ namespace TRITON_SERVER
             if (model_tensor->size != expect_size)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} expect size:{} but get {}", 
-                    index, expect_size, model_tensor->size);
+                    tensor_name, expect_size, model_tensor->size);
                 return -1;
             }
-            m_input_tensors[index] = triton_tensor;
+            m_input_tensors[tensor_name] = triton_tensor;
         }
         return 0;
     }
@@ -204,9 +193,11 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model status is false");
             return -1;
         }
-        std::string model_version = std::to_string(m_model_version);
-        return TritonServerEngine::Instance().infer(m_model_name, model_version, 
-            m_model_input_attrs, m_model_output_attrs, m_input_tensors, m_output_tensors);
+        // std::string model_version = std::to_string(m_model_version);
+        // return TritonServerEngine::Instance().infer(m_model_name, model_version, 
+        //     m_model_input_attrs, m_model_output_attrs, m_input_tensors, m_output_tensors);
+        return TRITON_SERVER_INFER(m_model_name, m_model_version, m_model_input_attrs, m_model_output_attrs, 
+            m_input_tensors, m_output_tensors, m_response_allcator);
     }
 
     int TritonModel::outputsGet(uint32_t n_outputs, ModelTensor* outputs)
@@ -226,14 +217,28 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model output tensor is nullptr");
             return -1;
         }
-        for (auto i = 0; i < m_output_tensors.size(); i++)
+        if (n_outputs != m_model_output_attrs.size())
         {
-            int index = i;
-            ModelTensor* model_tensor = outputs + i;
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "output tensor number:{} not equal to tensor attr number:{}", 
+                n_outputs, m_model_output_attrs.size());
+            return -1;
+        }
+
+        for (auto i = 0; i < m_model_output_attrs.size(); i++)
+        {
+            const auto& tensor_attr = m_model_output_attrs[i];
+            int index = tensor_attr.index;
+            std::string tensor_name = std::string(tensor_attr.name);
+            if (m_output_tensors.end() == m_output_tensors.find(tensor_name))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "cannot find model output tensor {}", tensor_name);
+                return -1;
+            }
+            ModelTensor* model_tensor = outputs + index;
             model_tensor->index = index;
-            model_tensor->buf = m_output_tensors[i]->base<void>();
-            model_tensor->size = m_output_tensors[i]->byteSize();
-            model_tensor->type = (TensorDataType)m_output_tensors[i]->dataType();
+            model_tensor->buf = m_output_tensors[tensor_name]->base<void>();
+            model_tensor->size = m_output_tensors[tensor_name]->byteSize();
+            model_tensor->type = (TensorDataType)m_output_tensors[tensor_name]->dataType();
         }
         return 0;
     }
