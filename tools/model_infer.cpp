@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
 
     // init model context
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "2 init model context");
-    if (0 != initModel(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version))
+    if (0 != modelInit(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "init model context fail");
         goto FINAL;

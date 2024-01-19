@@ -22,7 +22,7 @@ extern "C" {
     return:
         int                             error code.
 */
-TRITONSERVER_API int initModel(ModelContext* context, const char* model_name, int64_t model_version = -1);
+TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version = -1);
 
 
 /*  modelDestroy

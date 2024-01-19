@@ -10,7 +10,7 @@
 #include "tritonserver_wrapper/tritonserver_cpp_wrapper.h"
 using namespace TRITON_SERVER;
 
-TRITONSERVER_API int initModel(ModelContext* context, const char* model_name, int64_t model_version)
+TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version)
 {
     *context = nullptr;
     std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version));
