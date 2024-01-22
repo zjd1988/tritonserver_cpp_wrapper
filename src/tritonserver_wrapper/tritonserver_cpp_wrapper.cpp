@@ -11,6 +11,17 @@
 namespace TRITON_SERVER
 {
 
+    std::map<std::string, ModelPlatformType> gStrToModelPlatformType {
+        {"tensorflow_graphdef", TENSORFLOW_GRAPHDEF_PLATFORM_TYPE},
+        {"tensorflow_savedmodel", TENSORFLOW_SAVEDMODEL_PLATFORM_TYPE},
+        {"tensorrt_plan", TENSORRT_PLAN_PLATFORM_TYPE},
+        {"onnxruntime_onnx", ONNRUNTIME_ONNX_PLATFORM_TYPE},
+        {"pytorch_libtorch", PYTORCH_LIBTORCH_PLATFORM_TYPE},
+        {"python", PYTHON_PLATFORM_TYPE},
+        {"ensemble", ENSEMBLE_PLATFORM_TYPE},
+        {"rknn", RKNN_PLATFORM_TYPE},
+    };
+
     TritonModel::TritonModel(const char* model_name, int64_t model_version)
     {
         if (nullptr == model_name)
@@ -25,12 +36,22 @@ namespace TRITON_SERVER
         }
         m_model_name = model_name;
         m_model_version = model_version;
-        if (0 != TritonServerEngine::Instance().getModelInfo(model_name, model_version, 
+        std::string model_paltform;
+        if (0 != TritonServerEngine::Instance().getModelMetaInfo(model_name, model_version, model_paltform, 
             m_model_input_attrs, m_model_output_attrs))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "get model {}:{} info fail", model_name, model_version);
             return;
         }
+
+        if (gStrToModelPlatformType.end() == gStrToModelPlatformType.find(model_paltform))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "get unsuppored platform for model {}:{}", 
+                model_paltform, model_name, model_version);
+            return;
+        }
+        m_model_platform = gStrToModelPlatformType[model_paltform];
+
         if (0 == m_model_input_attrs.size() || 0 == m_model_output_attrs.size())
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model {}:{} input number:{} output number:{}", 
@@ -112,6 +133,18 @@ namespace TRITON_SERVER
                     return -1;
                 }
                 memcpy(info, &m_model_output_attrs[0], size);
+                break;
+            }
+            case MODEL_QUERY_PLATFORM_TYPE:
+            {
+                uint32_t expect_size = sizeof(ModelPlatformType);
+                if (expect_size != size)
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query MODEL_QUERY_PLATFORM_TYPE size expect {}"
+                        " but get {}", expect_size, size);
+                    return -1;
+                }
+                memcpy(info, &m_model_platform, size);
                 break;
             }
             default:

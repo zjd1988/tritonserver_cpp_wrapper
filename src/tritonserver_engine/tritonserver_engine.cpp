@@ -629,122 +629,88 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    int TritonServerEngine::getModelInfo(const std::string model_name, const int64_t model_version, 
-        std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs)
+    int TritonServerEngine::getModelMetaInfo(const std::string model_name, const int64_t model_version, 
+        std::string& model_platform, std::vector<ModelTensorAttr>& input_attrs, 
+        std::vector<ModelTensorAttr>& output_attrs)
     {
         input_attrs.clear();
         output_attrs.clear();
+        std::string model_key = model_name + ":" + std::to_string(model_version);
+
         // get specific model info
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model {}:{} info", model_name, model_version);
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model {} info", model_key);
         if (nullptr == m_server.get())
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
             return -1;
         }
 
-        // get model statistic message
-        TRITONSERVER_Message* model_statistic_message;
+        // get model metadata
+        TRITONSERVER_Message* model_metadata_message = nullptr;
+        FAIL_IF_ERR(TRITONSERVER_ServerModelMetadata(m_server.get(), model_name.c_str(), model_version, 
+            &model_metadata_message), "unable to get model metadata message");
 
-        FAIL_IF_ERR(TRITONSERVER_ServerModelStatistics(m_server.get(), model_name.c_str(), 
-            model_version, &model_statistic_message), "unable to get model statistic message");
+        // serialize model metadata to json str
+        const char* model_metadata_buffer;
+        size_t model_metadata_byte_size;
+        FAIL_IF_ERR(TRITONSERVER_MessageSerializeToJson(model_metadata_message, &model_metadata_buffer, 
+            &model_metadata_byte_size), "unable to serialize model metadata");
 
-        const char* buffer;
-        size_t byte_size;
-        FAIL_IF_ERR(TRITONSERVER_MessageSerializeToJson(model_statistic_message, &buffer, &byte_size),
-            "unable to serialize models statistic message");
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model {} metadata:\n{}", model_key, model_metadata_buffer);
 
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model {}:{} Statistics:\n{}", 
-            model_name, model_version, buffer);
-
-        // parse model statistic message
-        rapidjson::Document model_statistic_metadata;
-        model_statistic_metadata.Parse(buffer, byte_size);
-        if (model_statistic_metadata.HasParseError())
+        // parse model metadata json
+        rapidjson::Document model_metadata;
+        model_metadata.Parse(model_metadata_buffer, model_metadata_byte_size);
+        if (model_metadata.HasParseError())
         {
-            FAIL("error: failed to parse models statistic from JSON: " +
-                std::string(GetParseError_En(model_statistic_metadata.GetParseError())) +
-                " at " + std::to_string(model_statistic_metadata.GetErrorOffset()));
+            FAIL("error: failed to parse model " + model_key + std::string(" metadata from JSON: ") + 
+                std::string(GetParseError_En(model_metadata.GetParseError())) +
+                " at " + std::to_string(model_metadata.GetErrorOffset()));
         }
 
-        // delete model statistic message
-        FAIL_IF_ERR(TRITONSERVER_MessageDelete(model_statistic_message),
-            "deleting models statistic message");
+        // delete model metadata message
+        FAIL_IF_ERR(TRITONSERVER_MessageDelete(model_metadata_message), "deleting model metadata message");
 
-        // init model info
-        const rapidjson::Value &model_stats = model_statistic_metadata["model_stats"];
-        for (auto &model_item : model_stats.GetArray())
+        // check model name
+        if (strcmp(model_metadata["name"].GetString(), model_name.c_str()))
         {
-            std::string model_name = model_item["name"].GetString();
-            std::string model_version_str = model_item["version"].GetString();
-            std::string model_key = model_name + ":" + model_version_str;
+            FAIL("unable to find metadata for model " + model_key);
+        }
 
-            // get model metadata
-            std::stringstream ss;
-            int64_t model_version_int;
-            ss << model_version_str;
-            ss >> model_version_int;
-            TRITONSERVER_Message* model_metadata_message;
-            FAIL_IF_ERR(TRITONSERVER_ServerModelMetadata(m_server.get(), model_name.c_str(), model_version_int, &model_metadata_message), 
-                "unable to get model metadata message");
-            const char* model_metadata_buffer;
-            size_t model_metadata_byte_size;
-            FAIL_IF_ERR(TRITONSERVER_MessageSerializeToJson(model_metadata_message, &model_metadata_buffer, &model_metadata_byte_size),
-                "unable to serialize model metadata");
+        // get model platform
+        model_platform = model_metadata["platform"].GetString();
 
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model {}:{} metadata:\n{}", 
-                model_name, model_version, model_metadata_buffer);
-
-            // parse model metadata json
-            rapidjson::Document model_metadata;
-            model_metadata.Parse(model_metadata_buffer, model_metadata_byte_size);
-            if (model_metadata.HasParseError())
+        // check model version
+        bool found_version = false;
+        if (model_metadata.HasMember("versions"))
+        {
+            for (const auto& version : model_metadata["versions"].GetArray())
             {
-                FAIL("error: failed to parse model " + model_key + std::string(" metadata from JSON: ") + 
-                    std::string(GetParseError_En(model_metadata.GetParseError())) +
-                    " at " + std::to_string(model_metadata.GetErrorOffset()));
-            }
-
-            // delete model metadata message
-            FAIL_IF_ERR(TRITONSERVER_MessageDelete(model_metadata_message), 
-                "deleting model metadata message");
-
-            // check model name
-            if (strcmp(model_metadata["name"].GetString(), model_name.c_str()))
-            {
-                FAIL("unable to find metadata for model " + model_key);
-            }
-
-            // check model version
-            bool found_version = false;
-            if (model_metadata.HasMember("versions"))
-            {
-                for (const auto& version : model_metadata["versions"].GetArray())
+                if (strcmp(version.GetString(), std::to_string(model_version).c_str()) == 0)
                 {
-                    if (strcmp(version.GetString(), std::to_string(model_version).c_str()) == 0)
-                    {
-                        found_version = true;
-                        break;
-                    }
+                    found_version = true;
+                    break;
                 }
             }
-            if (-1 == model_version || found_version)
+        }
+        if (-1 == model_version || found_version)
+        {
+            if (0 != parseModelMetadata(model_metadata, model_name, std::to_string(model_version), 
+                input_attrs, output_attrs))
             {
-                if (0 != parseModelMetadata(model_metadata, model_name, std::to_string(model_version), 
-                    input_attrs, output_attrs))
-                {
-                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "parsing model {} metadata fail", model_key);
-                    input_attrs.clear();
-                    output_attrs.clear();
-                    return -1;
-                }
-            }
-            else
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unable to find version {} status for model {}", 
-                    model_version, model_name);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "parsing model {} metadata fail", model_key);
+                input_attrs.clear();
+                output_attrs.clear();
                 return -1;
             }
         }
+        else
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unable to find version {} status for model {}", 
+                model_version, model_name);
+            return -1;
+        }
+
         return 0;
     }
 

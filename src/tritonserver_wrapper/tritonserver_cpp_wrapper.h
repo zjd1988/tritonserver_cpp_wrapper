@@ -33,6 +33,7 @@ namespace TRITON_SERVER
     private:
         std::string                                               m_model_name;
         int64_t                                                   m_model_version;
+        ModelPlatformType                                         m_model_platform;
         bool                                                      m_model_status = false;
         std::vector<ModelTensorAttr>                              m_model_input_attrs;
         std::vector<ModelTensorAttr>                              m_model_output_attrs;

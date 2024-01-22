@@ -34,6 +34,18 @@ extern "C" {
 
 typedef void* ModelContext;
 
+typedef enum ModelPlatformType
+{
+    TENSORFLOW_GRAPHDEF_PLATFORM_TYPE,
+    TENSORFLOW_SAVEDMODEL_PLATFORM_TYPE,
+    TENSORRT_PLAN_PLATFORM_TYPE,
+    ONNRUNTIME_ONNX_PLATFORM_TYPE,
+    PYTORCH_LIBTORCH_PLATFORM_TYPE,
+    PYTHON_PLATFORM_TYPE,
+    ENSEMBLE_PLATFORM_TYPE,
+    RKNN_PLATFORM_TYPE,
+    INVALID_PLATFORM_TYPE,
+} ModelPlatformType;
 
 // same with TRITONSERVER_DataType
 //
@@ -98,6 +110,7 @@ typedef enum ModeQueryCmd
     MODEL_QUERY_IN_OUT_NUM = 0,                          /* query the number of input & output tensor. */
     MODEL_QUERY_INPUT_ATTR,                              /* query the attribute of input tensor. */
     MODEL_QUERY_OUTPUT_ATTR,                             /* query the attribute of output tensor. */
+    MODEL_QUERY_PLATFORM_TYPE,                           /* query the deploy platform type of model. */
 
     MODEL_QUERY_CMD_MAX
 } ModeQueryCmd;
@@ -179,6 +192,23 @@ inline static const char* getTypeString(TensorDataType type)
         case TENSOR_TYPE_BYTES: return "BYTES";
         case TENSOR_TYPE_BF16: return "BF16";
         default: return "UNKNOW";
+    }
+}
+
+inline static const char* getModelPlatformTypeString(ModelPlatformType type)
+{
+    switch(type)
+    {
+        case TENSORFLOW_GRAPHDEF_PLATFORM_TYPE: return "tensorflow_graphdef";
+        case TENSORFLOW_SAVEDMODEL_PLATFORM_TYPE: return "tensorflow_savedmodel";
+        case TENSORRT_PLAN_PLATFORM_TYPE: return "tensorrt_plan";
+        case ONNRUNTIME_ONNX_PLATFORM_TYPE: return "onnxruntime_onnx";
+        case PYTORCH_LIBTORCH_PLATFORM_TYPE: return "pytorch_libtorch";
+        case PYTHON_PLATFORM_TYPE: return "python";
+        case ENSEMBLE_PLATFORM_TYPE: return "ensemble";
+        case RKNN_PLATFORM_TYPE: return "rknn";
+        case INVALID_PLATFORM_TYPE: return "invalid";
+        default: return "unknown";
     }
 }
 

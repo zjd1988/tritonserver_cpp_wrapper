@@ -62,7 +62,7 @@ namespace TRITON_SERVER
             const std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors, 
             std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, 
             void* response_allocator = nullptr);
-        int getModelInfo(const std::string model_name, const int64_t model_version, 
+        int getModelMetaInfo(const std::string model_name, const int64_t model_version, std::string& model_platform, 
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
 
         // load/unload model by name

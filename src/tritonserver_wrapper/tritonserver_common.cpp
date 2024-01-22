@@ -32,7 +32,7 @@ TRITONSERVER_API int initTritonServerWithCustom(const ServerConfig* config)
 
 TRITONSERVER_API int initTritonServerWithDefault(const char* model_repository_path, LogVerboseLevel log_verbose_level)
 {
-    if (nullptr == model_name)
+    if (nullptr == model_repository_path)
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model repo path is nullptr when triton server init");
         return -1;
