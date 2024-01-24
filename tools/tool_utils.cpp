@@ -10,6 +10,8 @@
 #include "npy.hpp"
 #include "tool_utils.h"
 #include "common/log.h"
+#include "ghc/filesystem.h"
+namespace fs = ghc::filesystem;
 
 namespace TRITON_SERVER
 {
@@ -278,7 +280,7 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    int saveModelTensorToNpyFile(const std::string file_name, ModelTensorAttr tensor_attr, ModelTensor* tensor)
+    int saveModelTensorToNpyFile(const std::string file_name, ModelTensor* tensor)
     {
         std::ofstream stream(file_name, std::ofstream::binary);
         if (!stream.is_open())
@@ -287,34 +289,34 @@ namespace TRITON_SERVER
             return -1;
         }
         std::type_index tensor_index = std::type_index(typeid(float));
-        if (TENSOR_TYPE_FP32 == tensor_attr.type)
+        if (TENSOR_TYPE_FP32 == tensor->type)
             tensor_index = std::type_index(typeid(float));
-        else if (TENSOR_TYPE_INT8 == tensor_attr.type)
+        else if (TENSOR_TYPE_INT8 == tensor->type)
             tensor_index = std::type_index(typeid(int8_t));
-        else if (TENSOR_TYPE_INT16 == tensor_attr.type)
+        else if (TENSOR_TYPE_INT16 == tensor->type)
             tensor_index = std::type_index(typeid(int16_t));
-        else if (TENSOR_TYPE_INT32 == tensor_attr.type)
+        else if (TENSOR_TYPE_INT32 == tensor->type)
             tensor_index = std::type_index(typeid(int32_t));
-        else if (TENSOR_TYPE_INT64 == tensor_attr.type)
+        else if (TENSOR_TYPE_INT64 == tensor->type)
             tensor_index = std::type_index(typeid(int64_t));
-        else if (TENSOR_TYPE_UINT8 == tensor_attr.type)
+        else if (TENSOR_TYPE_UINT8 == tensor->type)
             tensor_index = std::type_index(typeid(uint8_t));
-        else if (TENSOR_TYPE_UINT16 == tensor_attr.type)
+        else if (TENSOR_TYPE_UINT16 == tensor->type)
             tensor_index = std::type_index(typeid(uint16_t));
-        else if (TENSOR_TYPE_UINT32 == tensor_attr.type)
+        else if (TENSOR_TYPE_UINT32 == tensor->type)
             tensor_index = std::type_index(typeid(uint32_t));
-        else if (TENSOR_TYPE_UINT64 == tensor_attr.type)
+        else if (TENSOR_TYPE_UINT64 == tensor->type)
             tensor_index = std::type_index(typeid(uint64_t));
         else
         {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} data type: {} not supported", 
-                &tensor_attr.name[0], getTypeString(tensor_attr.type));
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unsupported tensor data type: {}", 
+                getTypeString(tensor->type));
             return -1;
         }
         std::vector<npy::ndarray_len_t> shape_v;
-        for (auto i = 0; i < tensor_attr.num_dim; i++)
+        for (auto i = 0; i < tensor->num_dim; i++)
         {
-            shape_v.push_back(tensor_attr.dims[i]);
+            shape_v.push_back(tensor->dims[i]);
         }
         bool fortran_order = false;
         npy::dtype_t dtype = npy::dtype_map.at(tensor_index);
@@ -348,6 +350,145 @@ namespace TRITON_SERVER
             return;
         free(tensor->buf);
         tensor->buf = nullptr;
+    }
+
+    int getModelInfo(const ModelContext model_context, ModelInputOutputNum& input_output_num, 
+        std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs)
+    {
+        // query model input output num
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "query model input output num");
+        if (0 != modelQuery(model_context, MODEL_QUERY_IN_OUT_NUM, &input_output_num, sizeof(ModelInputOutputNum)))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input output number fail");
+            return -1;
+        }
+
+        // query model input tensor attr
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "query model input tensor attr");
+        input_attrs.resize(input_output_num.n_input);
+        if (0 != modelQuery(model_context, MODEL_QUERY_INPUT_ATTR, &input_attrs[0], 
+            input_output_num.n_input * sizeof(input_attrs[0])))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input tensor attr fail");
+            return -1;
+        }
+        for (auto index = 0; index < input_output_num.n_input; index++)
+        {
+            std::vector<int64_t> tensor_shape(&input_attrs[index].dims[0], 
+                &input_attrs[index].dims[0] + input_attrs[index].num_dim);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", input_attrs[index].index);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &input_attrs[index].name[0]);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(input_attrs[index].type));
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
+        }
+
+        // query model output tensor attr
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "query model output tensor attr");
+        output_attrs.resize(input_output_num.n_output);
+        if (0 != modelQuery(model_context, MODEL_QUERY_OUTPUT_ATTR, &output_attrs[0], 
+            input_output_num.n_output * sizeof(output_attrs[0])))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model output tensor attr fail");
+            return -1;
+        }
+        for (auto index = 0; index < input_output_num.n_output; index++)
+        {        
+            std::vector<int64_t> tensor_shape(&output_attrs[index].dims[0], 
+                &output_attrs[index].dims[0] + output_attrs[index].num_dim);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", output_attrs[index].index);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &output_attrs[index].name[0]);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(output_attrs[index].type));
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
+        }
+        return 0;
+    }
+
+    int loadInputTensors(const std::vector<std::string>& input_files, const ModelInputOutputNum& input_output_num, 
+        const std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensor>& input_tensors)
+    {
+        ModelTensor tensor;
+        if (0 == input_files.size())
+        {
+            for (int index = 0; index < input_output_num.n_input; index++)
+            {
+                if(0 != loadRandomDataToModelTensor(input_attrs[index], &tensor))
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from number:{} tensor attr fail", index);
+                    return -1;
+                }
+                tensor.index = index;
+                input_tensors.push_back(tensor);
+            }
+        }
+        else
+        {
+            for (int index = 0; index < input_files.size(); index++)
+            {
+                fs::path file_path = input_files[index];
+                std::string file_type = file_path.extension().string();
+                if (!fs::exists(file_path))
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "file {} not exists", file_path.string());
+                    return -1;
+                }
+                if (file_type == ".jpg" || file_type == ".bmp")
+                {
+                    if (0 != loadStbDataToModelTensor(file_path.string(), &tensor))
+                    {
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from {} fail", file_path.string());
+                        return -1;
+                    }
+                }
+                else if (file_type == ".npy")
+                {
+                    if (0 != loadNpyDataToModelTensor(file_path.string(), &tensor))
+                    {
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from {} fail", file_path.string());
+                        return -1;
+                    }
+                }
+                else
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unsupported file type {}", file_path.string());
+                    return -1;
+                }
+                tensor.index = index;
+                input_tensors.push_back(tensor);
+            }
+        }
+        return 0;
+    }
+
+    int modelInference(const ModelContext model_context, const ModelInputOutputNum& input_output_num, 
+        std::vector<ModelTensor>& input_tensors, std::vector<ModelTensor>& output_tensors)
+    {
+        // set model inputs
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "set model inputs");
+        if (0 != modelInputsSet(model_context, input_output_num.n_input, &input_tensors[0]))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inputs set fail");
+            return -1;
+        }
+
+        // model run
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model run");
+        if (0 != modelRun(model_context))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model run fail");
+            return -1;
+        }
+
+        // get model output
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "get model output");
+        output_tensors.resize(input_output_num.n_output);
+        if (0 != modelOutputsGet(model_context, input_output_num.n_output, &output_tensors[0]))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model outputs get fail");
+            return -1;
+        }
+        return 0;
     }
 
 } // namespace TRITON_SERVER

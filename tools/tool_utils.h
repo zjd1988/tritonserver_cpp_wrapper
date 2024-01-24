@@ -5,7 +5,6 @@
 ***********************************/
 #pragma once
 #include "cxxopts.hpp"
-#include "ghc/filesystem.h"
 #include "common/non_copyable.h"
 #include "tritonserver_wrapper/tritonserver_c_wrapper.h"
 
@@ -32,7 +31,16 @@ namespace TRITON_SERVER
     int loadRandomDataToModelTensor(ModelTensorAttr tensor_attr, ModelTensor* tensor);
     int loadStbDataToModelTensor(const std::string file_name, ModelTensor* tensor);
     int loadNpyDataToModelTensor(const std::string file_name, ModelTensor* tensor);
-    int saveModelTensorToNpyFile(const std::string file_name, ModelTensorAttr tensor_attr, ModelTensor* tensor);
+    int saveModelTensorToNpyFile(const std::string file_name, ModelTensor* tensor);
     void releaseModelTensor(ModelTensor* tensor);
+
+    int getModelInfo(const ModelContext model_context, ModelInputOutputNum& input_output_num, 
+        std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
+
+    int loadInputTensors(const std::vector<std::string>& input_files, const ModelInputOutputNum& input_output_num, 
+        const std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensor>& input_tensors);
+
+    int modelInference(const ModelContext model_context, const ModelInputOutputNum& input_output_num, 
+        std::vector<ModelTensor>& input_tensors, std::vector<ModelTensor>& output_tensors);
 
 } // namespace TRITON_SERVER

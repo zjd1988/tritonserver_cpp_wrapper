@@ -9,7 +9,6 @@
 #include "tritonserver_wrapper/tritonserver_c_wrapper.h"
 
 using namespace TRITON_SERVER;
-namespace fs = ghc::filesystem;
 
 int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
 {
@@ -101,8 +100,6 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
 
 int main(int argc, char* argv[])
 {
-    int index = 0;
-    std::string file_type;
     CmdLineArgOption cmd_option;
     ModelContext model_context = nullptr;
     ModelInputOutputNum input_output_num;
@@ -148,108 +145,24 @@ int main(int argc, char* argv[])
         goto FINAL;
     }
 
-    // query model input output num
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "3 query model input output num");
-    if (0 != modelQuery(model_context, MODEL_QUERY_IN_OUT_NUM, &input_output_num, sizeof(ModelInputOutputNum)))
+    // get model info
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "3 get model info");
+    if (0 != getModelInfo(model_context, input_output_num, input_attrs, output_attrs))
     {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input output number fail");
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "get model info fail");
         goto FINAL;
-    }
-
-    // query model input tensor attr
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "4 query model input tensor attr");
-    input_attrs.resize(input_output_num.n_input);
-    if (0 != modelQuery(model_context, MODEL_QUERY_INPUT_ATTR, &input_attrs[0], 
-        input_output_num.n_input * sizeof(input_attrs[0])))
-    {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model input tensor attr fail");
-        goto FINAL;
-    }
-    for (index = 0; index < input_output_num.n_input; index++)
-    {
-        std::vector<int64_t> tensor_shape(&input_attrs[index].dims[0], 
-            &input_attrs[index].dims[0] + input_attrs[index].num_dim);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", input_attrs[index].index);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &input_attrs[index].name[0]);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(input_attrs[index].type));
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
-    }
-
-    // query model output tensor attr
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "5 query model output tensor attr");
-    output_attrs.resize(input_output_num.n_output);
-    if (0 != modelQuery(model_context, MODEL_QUERY_OUTPUT_ATTR, &output_attrs[0], 
-        input_output_num.n_output * sizeof(output_attrs[0])))
-    {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "query model output tensor attr fail");
-        goto FINAL;
-    }
-    for (index = 0; index < input_output_num.n_output; index++)
-    {        
-        std::vector<int64_t> tensor_shape(&output_attrs[index].dims[0], 
-            &output_attrs[index].dims[0] + output_attrs[index].num_dim);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "---------------");
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         index: {}", output_attrs[index].index);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          name: {}", &output_attrs[index].name[0]);
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      datatype: {}", getTypeString(output_attrs[index].type));
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         shape: {}", fmt::join(tensor_shape, " "));
     }
 
     // load input files
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 load input files");
-    if (0 == cmd_option.input_files.size())
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "4 load model input tensors");
+    if (0 != loadInputTensors(cmd_option.input_files, input_output_num, input_attrs, input_tensors))
     {
-        for (index = 0; index < input_output_num.n_input; index++)
-        {
-            if(0 != loadRandomDataToModelTensor(input_attrs[index], &tensor))
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from number:{} tensor attr fail", index);
-                break;
-            }
-            tensor.index = index;
-            input_tensors.push_back(tensor);
-        }
-    }
-    else
-    {
-        for (index = 0; index < cmd_option.input_files.size(); index++)
-        {
-            fs::path file_path = cmd_option.input_files[index];
-            file_type = file_path.extension().string();
-            if (!fs::exists(file_path))
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "file {} not exists", file_path.string());
-                break;
-            }
-            if (file_type == ".jpg" || file_type == ".bmp")
-            {
-                if (0 != loadStbDataToModelTensor(file_path.string(), &tensor))
-                {
-                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from {} fail", file_path.string());
-                    break;
-                }
-            }
-            else if (file_type == ".npy")
-            {
-                if (0 != loadNpyDataToModelTensor(file_path.string(), &tensor))
-                {
-                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load tensor from {} fail", file_path.string());
-                    break;
-                }
-            }
-            else
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unsupported file type {}", file_path.string());
-                break;
-            }
-            tensor.index = index;
-            input_tensors.push_back(tensor);
-        }
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "load model input tensors fail");
+        goto FINAL;
     }
 
     // check model input number equalt to input files number
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "7 check model input number equalt to input files number");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "5 check model input number equalt to input files number");
     if (input_output_num.n_input != input_tensors.size())
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model expect inputs number:{}, but get input tensors number:{}",
@@ -257,40 +170,23 @@ int main(int argc, char* argv[])
         goto FINAL;
     }
 
-    // set model inputs
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "8 set model inputs");
-    if (0 != modelInputsSet(model_context, input_output_num.n_input, &input_tensors[0]))
+    // model inference
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model inference");
+    if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
     {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inputs set fail");
-        goto FINAL;
-    }
-
-    // model run
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "9 model run");
-    if (0 != modelRun(model_context))
-    {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model run fail");
-        goto FINAL;
-    }
-
-    // get model output
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "10 get model output");
-    output_tensors.resize(input_output_num.n_output);
-    if (0 != modelOutputsGet(model_context, input_output_num.n_output, &output_tensors[0]))
-    {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model outputs get fail");
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
         goto FINAL;
     }
 
     // save model output
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "11 save model output");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "7 save model output");
     if (cmd_option.output_flag)
     {
-        for (index = 0; index < output_tensors.size(); index++)
+        for (int index = 0; index < output_tensors.size(); index++)
         {
             std::string tensor_name = std::string(output_attrs[index].name);
             std::string output_file = tensor_name + ".npy";
-            if (saveModelTensorToNpyFile(output_file, output_attrs[index], &output_tensors[index]))
+            if (saveModelTensorToNpyFile(output_file, &output_tensors[index]))
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "save tensor {} to file {} fail", 
                     tensor_name, output_file);
@@ -300,7 +196,7 @@ int main(int argc, char* argv[])
     }
 
     // release model outputs
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "12 release model outputs");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "8 release model outputs");
     if (0 != modelOutputsRelease(model_context, input_output_num.n_output, &output_tensors[0]))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model outputs release fail");
@@ -309,19 +205,19 @@ int main(int argc, char* argv[])
 
 FINAL:
     // release input tensor buf
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "13 release input tensor buf");
-    for (index = 0; index < input_tensors.size(); index++)
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "9 release input tensor buf");
+    for (int index = 0; index < input_tensors.size(); index++)
     {
         releaseModelTensor(&input_tensors[index]);
     }
 
     // destroy model context
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "14 destroy model context");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "10 destroy model context");
     modelDestroy(model_context);
     model_context = nullptr;
 
     // uninit triton server
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "15 uninit triton server");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "11 uninit triton server");
     uninitTritonServer();
     return 0;
 }
