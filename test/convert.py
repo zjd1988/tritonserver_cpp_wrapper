@@ -39,10 +39,11 @@ if __name__ == "__main__":
     parser.add_argument('--input', type=str, default="./images/test.jpg", help='input image file path')
     parser.add_argument('--resize', type=int, nargs='+', help='resize size')
     parser.add_argument('--bgr2rgb', action='store_true', help='bgr to rgb')
+    parser.add_argument('--nhwc2nchw', action='store_true', help='nhwc to nchw')
     parser.add_argument('--mean', type=float, nargs='+', default=[0.0, 0.0, 0.0], help='mean values')
     parser.add_argument('--std', type=float, nargs='+', default=[1.0, 1.0, 1.0], help='std values')
     parser.add_argument('--output', type=str, default="./data/test.npy", help='output numpy file path')
-    # parser.add_argument('--dtype', type=str, default='i8', help='dtype of npy, i8/fp32')
+    parser.add_argument('--dtype', type=str, default='fp32', help='dtype of npy, u8/i8/fp32')
     args = parser.parse_args()
 
     image = cv2.imread(args.input)
@@ -51,12 +52,17 @@ if __name__ == "__main__":
     else:
         resized_image = image
     if args.bgr2rgb:
-        chw_img = resized_image[:, :, ::-1].transpose(2, 0, 1)
+        resized_image = resized_image[:, :, ::-1]
+
+    img_np = np.ascontiguousarray(resized_image)
+    std = np.array(args.std).reshape((1,1,3))
+    mean = np.array(args.mean).reshape((1,1,3))
+    norm_np = (img_np - mean) / std
+    if args.nhwc2nchw:
+        norm_np = norm_np.transpose(2, 0, 1)
+    nptypes_map = {"u8": np.uint8, "i8": np.int8, "fp32": np.float32}
+    if args.dtype in nptypes_map.keys():
+        output_np = np.expand_dims(norm_np, 0).astype(nptypes_map[args.dtype])
     else:
-        chw_img = resized_image.transpose(2, 0, 1)
-    chw_np = np.ascontiguousarray(chw_img)
-    std = np.array(args.std).reshape((3,1,1))
-    mean = np.array(args.mean).reshape((3,1,1))
-    norm_np = (chw_np - mean) / std
-    output_np = np.expand_dims(norm_np, 0).astype(np.float32)
+        print("input unsupported dtype {}, current only support {}".format(args.dtype, nptypes_map))
     np.save(args.output, output_np)
