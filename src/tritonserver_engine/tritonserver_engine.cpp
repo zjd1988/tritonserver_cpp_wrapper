@@ -127,6 +127,11 @@ namespace TRITON_SERVER
         m_dtype = dtype;
         m_shape = shape;
         int64_t ele_count = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int64_t>());
+        if (ele_count <= 0)
+        {
+            std::string shape_str = fmt::format("{}", fmt::join(shape, " "));
+            FAIL("invalid triton tensor shape " + shape_str);
+        }
         m_byte_size = ele_count * getTritonDataTypeByteSize(m_dtype);
         if (nullptr == data)
         {

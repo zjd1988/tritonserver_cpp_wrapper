@@ -144,6 +144,8 @@ namespace TRITON_SERVER
         tensor->buf = tensor_data;
         tensor->size = element_count * element_size;
         tensor->type = tensor_attr.type;
+        tensor->num_dim = tensor_attr.num_dim;
+        memcpy(&tensor->dims[0], &tensor_attr.dims[0], sizeof(int64_t) * tensor->num_dim);
         return 0;
     }
 
@@ -192,6 +194,10 @@ namespace TRITON_SERVER
         tensor->buf = bgr_data;
         tensor->size = height * width * channel;
         tensor->type = TENSOR_TYPE_UINT8;
+        tensor->num_dim = 3;
+        tensor->dims[0] = height;
+        tensor->dims[1] = width;
+        tensor->dims[2] = channel;
         return 0;
     }
 
@@ -265,7 +271,10 @@ namespace TRITON_SERVER
 
         tensor->buf = tensor_data;
         tensor->size = tensor_len;
-        tensor->type = tensor_dtype;        
+        tensor->type = tensor_dtype;
+        std::vector<int64_t> tensor_shape(npy_header.shape.begin(), npy_header.shape.end()); 
+        tensor->num_dim = tensor_shape.size();
+        memcpy(&tensor->dims[0], &tensor_shape[0], sizeof(int64_t) * tensor->num_dim);
         return 0;
     }
 

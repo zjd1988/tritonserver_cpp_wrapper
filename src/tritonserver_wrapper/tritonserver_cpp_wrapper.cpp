@@ -188,30 +188,39 @@ namespace TRITON_SERVER
             const auto& tensor_attr = m_model_input_attrs[index];
             std::string tensor_name = std::string(tensor_attr.name);
             // check input datatype
-            TRITONSERVER_DataType dtype = (TRITONSERVER_DataType)model_tensor->type;
+            TRITONSERVER_DataType input_dtype = (TRITONSERVER_DataType)model_tensor->type;
             TRITONSERVER_DataType expect_dtype = (TRITONSERVER_DataType)tensor_attr.type;
-            if (dtype != expect_dtype)
+            if (input_dtype != expect_dtype)
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} expect datatype:{} but get {}", 
                     tensor_name, getTypeString(tensor_attr.type), getTypeString(model_tensor->type));
                 return -1;
             }
+            // check input tensor shape with model input tensor shape
+            std::vector<int64_t> expect_shape(&tensor_attr.dims[0], &tensor_attr.dims[0] + tensor_attr.num_dim);
+            std::vector<int64_t> input_shape(&model_tensor->dims[0], &model_tensor->dims[0] + model_tensor->num_dim);
+            if (expect_shape.size() != input_shape.size())
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "checke tensor:{} shape size fail, expect shape:{} but get {}", 
+                    tensor_name, fmt::join(expect_shape, " "), fmt::join(input_shape, " "));
+                return -1;                
+            }            
+            for (auto dim_index = 0; dim_index < expect_shape.size(); dim_index++)
+            {
+                if (0 < expect_shape[dim_index] && 
+                    input_shape[dim_index] != expect_shape[dim_index])
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "check tensor:{} shape dims fail, expect shape:{} but get {}", 
+                        tensor_name, fmt::join(expect_shape, " "), fmt::join(input_shape, " "));
+                    return -1;
+                }
+            }
             // construct tensor with datatype/shape/data
-            uint32_t num_dim = tensor_attr.num_dim;
-            std::vector<int64_t> expect_shape(&tensor_attr.dims[0], &tensor_attr.dims[0] + num_dim);
             void* data = model_tensor->buf;
-            std::shared_ptr<TritonTensor> triton_tensor(new TritonTensor(expect_dtype, expect_shape, data));
+            std::shared_ptr<TritonTensor> triton_tensor(new TritonTensor(input_dtype, input_shape, data));
             if (nullptr == triton_tensor.get())
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "construct tensor:{} fail", tensor_name);
-                return -1;
-            }
-            // check input data size 
-            uint32_t expect_size = triton_tensor->byteSize();
-            if (model_tensor->size != expect_size)
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "tensor:{} expect size:{} but get {}", 
-                    tensor_name, expect_size, model_tensor->size);
                 return -1;
             }
             m_input_tensors[tensor_name] = triton_tensor;
@@ -272,6 +281,9 @@ namespace TRITON_SERVER
             model_tensor->buf = m_output_tensors[tensor_name]->base<void>();
             model_tensor->size = m_output_tensors[tensor_name]->byteSize();
             model_tensor->type = (TensorDataType)m_output_tensors[tensor_name]->dataType();
+            auto tensor_shape = m_output_tensors[tensor_name]->shape();
+            model_tensor->num_dim = (uint32_t)tensor_shape.size();
+            memcpy(&model_tensor->dims[0], &tensor_shape[0], tensor_shape.size() * sizeof(int64_t));
         }
         return 0;
     }

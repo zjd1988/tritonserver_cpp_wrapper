@@ -87,10 +87,12 @@ typedef struct ModelTensorAttr
 //
 typedef struct ModelTensor 
 {
-    uint32_t index;                                     /* the tensor index. */
-    void* buf;                                          /* the buf for index. */
-    uint32_t size;                                      /* the size of input buf. */
-    TensorDataType type;                                /* the data type buf. */
+    uint32_t                                index;                                     /* the tensor index. */
+    void*                                   buf;                                       /* the buf for index. */
+    uint32_t                                size;                                      /* the size of input buf. */
+    TensorDataType                          type;                                      /* the data type buf. */
+    uint32_t                                num_dim;                                   /* the dims number. */
+    int64_t                                 dims[TRITON_TENSOR_MAX_DIM_NUM];           /* the dims value. */  
 } ModelTensor;
 
 //
