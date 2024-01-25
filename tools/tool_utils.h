@@ -19,7 +19,8 @@ namespace TRITON_SERVER
         std::vector<std::string>       input_files;
         bool                           output_flag = false;
         // model benchmark
-        int                            benchmark_times = 0;
+        bool                           benchmark = false;
+        int                            benchmark_number = 0;
         // common
         std::string                    model_repo_path;
         std::string                    backends_path;

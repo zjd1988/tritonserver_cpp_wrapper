@@ -3,6 +3,7 @@
 ******
 ******  Created by zhaojd on 2022/04/26.
 ***********************************/
+#include <chrono>
 #include "tool_utils.h"
 #include "pystring.h"
 #include "common/log.h"
@@ -32,6 +33,10 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
         // repo agent dir
         ("repo_agent_path", "repo agent path for triton server", 
             cxxopts::value<std::string>()->default_value("/opt/tritonserver/repoagents"))
+        // benchmark test
+        ("benchmark", "benchmark test")
+        // benchmark test times
+        ("benchmark_num", "benchmark test number", cxxopts::value<int>()->default_value("1"))
         // log level, default is info level
         ("log_level", "Log verbose level for triton server", cxxopts::value<int>()->default_value("0"))
         // help
@@ -90,6 +95,13 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
     arg_opt.backends_path = parse_result["backends_path"].as<std::string>();
     arg_opt.repo_agent_path = parse_result["repo_agent_path"].as<std::string>();
 
+    // 8 check benchmark config
+    if (parse_result.count("benchmark"))
+    {
+        arg_opt.benchmark = true;
+        arg_opt.benchmark_number = parse_result["benchmark_num"].as<int>();
+    }
+
     // LOG_VERBOSE_LEVEL_0 = 0,
     // LOG_VERBOSE_LEVEL_1,
     // LOG_VERBOSE_LEVEL_2,
@@ -122,6 +134,8 @@ int main(int argc, char* argv[])
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        model repo path: {}", cmd_option.model_repo_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          backends path: {}", cmd_option.backends_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        repo agent path: {}", cmd_option.repo_agent_path);
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         benchmark test: {}", cmd_option.benchmark);
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "       benchmark number: {}", cmd_option.benchmark_number);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      log verbose level: {}", cmd_option.log_verbose_level);
 
     // get triton server config
@@ -171,11 +185,36 @@ int main(int argc, char* argv[])
     }
 
     // model inference
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model inference");
-    if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+    if (cmd_option.benchmark)
     {
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
-        goto FINAL;
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model benchmark inference");
+        if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model warmup inference fail");
+            goto FINAL;
+        }
+        std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+        for (auto index = 0; index < cmd_option.benchmark_number; index++)
+        {
+            if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
+                goto FINAL;
+            }
+        }
+        std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::duration elapsed = end - start;
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model average inference time is {}ms", 
+            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() / cmd_option.benchmark_number);
+    }
+    else
+    {
+        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model inference");
+        if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
+            goto FINAL;
+        }
     }
 
     // save model output

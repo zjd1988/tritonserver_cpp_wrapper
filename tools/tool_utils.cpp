@@ -464,6 +464,7 @@ namespace TRITON_SERVER
     int modelInference(const ModelContext model_context, const ModelInputOutputNum& input_output_num, 
         std::vector<ModelTensor>& input_tensors, std::vector<ModelTensor>& output_tensors)
     {
+        output_tensors.clear();
         // set model inputs
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "set model inputs");
         if (0 != modelInputsSet(model_context, input_output_num.n_input, &input_tensors[0]))
