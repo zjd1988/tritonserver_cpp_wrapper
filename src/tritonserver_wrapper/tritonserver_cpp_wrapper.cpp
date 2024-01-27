@@ -4,7 +4,10 @@
  * @LastEditTime: 2024-01-11 
  * @LastEditors: zjd
  ********************************************/
+#include <iostream>
+#include "triton/core/tritonserver.h"
 #include "common/log.h"
+#include "tritonserver_engine/tritonserver_utils.h"
 #include "tritonserver_engine/tritonserver_engine.h"
 #include "tritonserver_wrapper/tritonserver_cpp_wrapper.h"
 
@@ -22,7 +25,7 @@ namespace TRITON_SERVER
         {"rknn", RKNN_PLATFORM_TYPE},
     };
 
-    TritonModel::TritonModel(const char* model_name, int64_t model_version)
+    TritonModel::TritonModel(const char* model_name, int64_t model_version, bool support_async)
     {
         if (nullptr == model_name)
         {
@@ -59,12 +62,26 @@ namespace TRITON_SERVER
                 sizeof(m_model_output_attrs.size()));
             return;
         }
-        m_response_allcator = TritonServerEngine::Instance().createResponseAllocator();
-        if (nullptr == m_response_allcator)
+
+        // init triton server allocator
+        if (0 != TritonServerEngine::Instance().createResponseAllocator(&m_response_allcator))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating response allocator for {}:{} fail", 
                 model_name, model_version);
             return;
+        }
+
+        if (support_async)
+        {
+            // init triton server request
+            if (0 != TritonServerEngine::Instance().createInferenceRequest(model_name, model_version, 
+                &m_inference_request))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating inference reqeust for {}:{} fail", 
+                    model_name, model_version);
+                return;
+            }
+            m_async = support_async;
         }
         m_model_status = true;
     }
@@ -75,6 +92,12 @@ namespace TRITON_SERVER
         m_model_output_attrs.clear();
         m_input_tensors.clear();
         m_output_tensors.clear();
+        m_inference_response_barrier.reset();
+        m_inference_request_barrier.reset();
+        if (nullptr != m_inference_request)
+        {
+            TritonServerEngine::Instance().deleteInferenceRequest(m_model_name, m_model_version, m_inference_request);
+        }
         if (nullptr != m_response_allcator)
         {
             TritonServerEngine::Instance().destroyResponseAllocator(m_response_allcator);
@@ -204,7 +227,7 @@ namespace TRITON_SERVER
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "checke tensor:{} shape size fail, expect shape:{} but get {}", 
                     tensor_name, fmt::join(expect_shape, " "), fmt::join(input_shape, " "));
                 return -1;                
-            }            
+            }
             for (auto dim_index = 0; dim_index < expect_shape.size(); dim_index++)
             {
                 if (0 < expect_shape[dim_index] && 
@@ -225,6 +248,28 @@ namespace TRITON_SERVER
             }
             m_input_tensors[tensor_name] = triton_tensor;
         }
+        if (m_async)
+        {
+
+            m_inference_request_barrier = std::make_unique<std::promise<void>>();
+            m_inference_response_barrier = std::make_unique<std::promise<void*>>();
+            if (nullptr == m_inference_request_barrier.get() || nullptr == m_inference_response_barrier.get())
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating inference reqeust/response barrier for {}:{} fail", 
+                    m_model_name, m_model_version);
+                return -1;
+            }
+            void* request_barrier = (void*)m_inference_request_barrier.get();
+            void* response_barrier = (void*)m_inference_response_barrier.get();
+            void* response_allocator = m_response_allcator;
+            if (0 != TritonServerEngine::Instance().prepareModelInferRequestResponse(m_inference_request, m_model_name, 
+                m_model_version, response_allocator, request_barrier, response_barrier, m_model_input_attrs, 
+                m_model_output_attrs, m_input_tensors))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "praprae model input/output tensors for request fail");
+                return -1;
+            }
+        }
         return 0;
     }
 
@@ -235,11 +280,15 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model status is false");
             return -1;
         }
-        // std::string model_version = std::to_string(m_model_version);
-        // return TritonServerEngine::Instance().infer(m_model_name, model_version, 
-        //     m_model_input_attrs, m_model_output_attrs, m_input_tensors, m_output_tensors);
-        return TRITON_SERVER_INFER(m_model_name, m_model_version, m_model_input_attrs, m_model_output_attrs, 
-            m_input_tensors, m_output_tensors, m_response_allcator);
+        if (m_async)
+        {
+            return TRITON_SERVER_INFER_ASYNC(m_model_name, m_model_version, m_inference_request);
+        }
+        else
+        {
+            return TRITON_SERVER_INFER(m_model_name, m_model_version, m_model_input_attrs, m_model_output_attrs, 
+                m_input_tensors, m_output_tensors, m_response_allcator);
+        }
     }
 
     int TritonModel::outputsGet(uint32_t n_outputs, ModelTensor* outputs)
@@ -265,7 +314,20 @@ namespace TRITON_SERVER
                 n_outputs, m_model_output_attrs.size());
             return -1;
         }
+        if (m_async)
+        {
+            std::future<void*> completed = m_inference_response_barrier->get_future();
+            void* completed_response = completed.get();
+            if (0 != TritonServerEngine::Instance().parseModelInferResponse(completed_response, m_model_name, 
+                m_model_version, m_model_output_attrs, m_output_tensors, true))
+            {
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "parse model output tensors from response fail");
+                return -1;
+            }
 
+            std::future<void> request_release_future = m_inference_request_barrier->get_future();
+            request_release_future.get();
+        }
         for (auto i = 0; i < m_model_output_attrs.size(); i++)
         {
             const auto& tensor_attr = m_model_output_attrs[i];

@@ -7,6 +7,12 @@
 #include "tool_utils.h"
 #include "pystring.h"
 #include "common/log.h"
+#ifdef USE_BACKWARD
+#include "backward.hpp"
+namespace backward {
+    backward::SignalHandling sh;
+}
+#endif
 #include "tritonserver_wrapper/tritonserver_c_wrapper.h"
 
 using namespace TRITON_SERVER;
@@ -33,6 +39,8 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
         // repo agent dir
         ("repo_agent_path", "repo agent path for triton server", 
             cxxopts::value<std::string>()->default_value("/opt/tritonserver/repoagents"))
+        // support async api call triton server 
+        ("support_async", "support async api call triton server init model and run")
         // benchmark test
         ("benchmark", "benchmark test")
         // benchmark test times
@@ -95,7 +103,11 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
     arg_opt.backends_path = parse_result["backends_path"].as<std::string>();
     arg_opt.repo_agent_path = parse_result["repo_agent_path"].as<std::string>();
 
-    // 8 check benchmark config
+    // 8 support async api
+    if (parse_result.count("support_async"))
+        arg_opt.support_async = true;
+
+    // 9 check benchmark config
     if (parse_result.count("benchmark"))
     {
         arg_opt.benchmark = true;
@@ -134,6 +146,7 @@ int main(int argc, char* argv[])
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        model repo path: {}", cmd_option.model_repo_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          backends path: {}", cmd_option.backends_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        repo agent path: {}", cmd_option.repo_agent_path);
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          support async: {}", cmd_option.support_async);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         benchmark test: {}", cmd_option.benchmark);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "       benchmark number: {}", cmd_option.benchmark_number);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      log verbose level: {}", cmd_option.log_verbose_level);
@@ -153,7 +166,8 @@ int main(int argc, char* argv[])
 
     // init model context
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "2 init model context");
-    if (0 != modelInit(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version))
+    if (0 != modelInit(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version, 
+        cmd_option.support_async))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "init model context fail");
         goto FINAL;
@@ -176,7 +190,7 @@ int main(int argc, char* argv[])
     }
 
     // check model input number equalt to input files number
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "5 check model input number equalt to input files number");
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "5 check model input number equal to input files number");
     if (input_output_num.n_input != input_tensors.size())
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model expect inputs number:{}, but get input tensors number:{}",
@@ -196,6 +210,7 @@ int main(int argc, char* argv[])
         std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
         for (auto index = 0; index < cmd_option.benchmark_number; index++)
         {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model benchmark inference {} times", index);
             if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");

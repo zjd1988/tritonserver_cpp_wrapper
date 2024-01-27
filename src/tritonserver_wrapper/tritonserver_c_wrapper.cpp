@@ -10,10 +10,11 @@
 #include "tritonserver_wrapper/tritonserver_cpp_wrapper.h"
 using namespace TRITON_SERVER;
 
-TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version)
+TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version, 
+    bool support_async)
 {
     *context = nullptr;
-    std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version));
+    std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version, support_async));
     if (nullptr == model_inst.get() || false == model_inst->status())
         return -1;
     *context = (ModelContext)model_inst.release();

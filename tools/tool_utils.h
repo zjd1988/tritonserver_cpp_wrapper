@@ -18,6 +18,8 @@ namespace TRITON_SERVER
         int64_t                        model_version;
         std::vector<std::string>       input_files;
         bool                           output_flag = false;
+        // support async api
+        bool                           support_async = false;
         // model benchmark
         bool                           benchmark = false;
         int                            benchmark_number = 0;

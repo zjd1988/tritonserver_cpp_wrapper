@@ -45,6 +45,9 @@ namespace TRITON_SERVER
     #define TRITON_SERVER_INFER(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator) \
         TRITON_SERVER::TritonServerEngine::Instance().infer(model_name, model_verison, inputs_attr, outputs_attr, inputs, outputs, allocator)
 
+    #define TRITON_SERVER_INFER_ASYNC(model_name, model_verison, infer_request) \
+        TRITON_SERVER::TritonServerEngine::Instance().inferAsync(model_name, model_verison, infer_request)
+
     #define TRITON_SERVER_UNINIT() TRITON_SERVER::TritonServerEngine::Instance().uninit()
 
     class TritonServerEngine : public NonCopyable
@@ -53,15 +56,25 @@ namespace TRITON_SERVER
         static TritonServerEngine& Instance();
         int init(const ServerConfig* config);
         void uninit();
-        void* createResponseAllocator();
-        void destroyResponseAllocator(void* allocator);
-        int infer(const std::string model_name, 
-            const int64_t model_version, 
+        int createInferenceRequest(const std::string model_name, const int64_t model_version, void** inference_req);
+        void deleteInferenceRequest(const std::string model_name, const int64_t model_version, void* inference_req);
+        // int initInferenceResponse(const std::string model_name, const int64_t model_version, 
+        //     void* allocator, void* inference_req, void* barrier);
+        int createResponseAllocator(void** response_allocator);
+        void destroyResponseAllocator(void* response_allocator);
+
+        // infer sync
+        int infer(const std::string model_name, const int64_t model_version, 
             const std::vector<ModelTensorAttr>& input_attrs, 
             const std::vector<ModelTensorAttr>& output_attrs, 
             const std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors, 
             std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, 
             void* response_allocator = nullptr);
+
+        // infer aync
+        int inferAsync(const std::string model_name, const int64_t model_version, void* inference_request);
+
+        // get model metadata info
         int getModelMetaInfo(const std::string model_name, const int64_t model_version, std::string& model_platform, 
             std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensorAttr>& output_attrs);
 
@@ -69,14 +82,19 @@ namespace TRITON_SERVER
         int loadModel(const std::string model_name);
         int unloadModel(const std::string model_name);
 
+        // prepare model infer request
+        int prepareModelInferRequestResponse(void* inference_req, const std::string model_name, 
+            const int64_t model_version, void* response_allocator, void* request_barrier, void* response_barrier, 
+            const std::vector<ModelTensorAttr>& input_attrs, const std::vector<ModelTensorAttr>& output_attrs, 
+            std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors);
+        // parse model infer result
+        int parseModelInferResponse(void* complete_response, const std::string model_name, 
+            const int64_t model_version, const std::vector<ModelTensorAttr>& output_attrs, 
+            std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, bool release_response = false);
+
     private:
         TritonServerEngine() = default;
         ~TritonServerEngine() = default;
-
-        void parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
-            const std::string model_name, const int64_t model_version, 
-            const std::map<std::string, ModelTensorAttr>& output_attrs, 
-            std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors);
 
     private:
         // triton server option

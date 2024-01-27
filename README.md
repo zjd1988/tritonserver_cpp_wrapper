@@ -1,5 +1,10 @@
 # tritonserver_cpp_wrapper
 
+## 安装依赖
+```
+apt-get install libdw-dev   // backward 使用
+```
+
 ## 3rd_party
 ```
 https://github.com/imageworks/pystring.git v1.1.4

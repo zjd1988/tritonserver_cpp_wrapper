@@ -6,6 +6,7 @@
  ********************************************/
 #pragma once
 #include <map>
+#include <future>
 #include <vector>
 #include <memory>
 #include <string>
@@ -19,7 +20,7 @@ namespace TRITON_SERVER
     class TritonModel
     {
     public:
-        TritonModel(const char* model_name, int64_t model_version = -1);
+        TritonModel(const char* model_name, int64_t model_version = -1, bool support_async = false);
         ~TritonModel();
 
     public:
@@ -39,6 +40,12 @@ namespace TRITON_SERVER
         std::vector<ModelTensorAttr>                              m_model_output_attrs;
         std::map<std::string, std::shared_ptr<TritonTensor>>      m_input_tensors;
         std::map<std::string, std::shared_ptr<TritonTensor>>      m_output_tensors;
+
+        // for async model run
+        bool                                                      m_async = false;
+        std::unique_ptr<std::promise<void*>>                      m_inference_response_barrier;
+        std::unique_ptr<std::promise<void>>                       m_inference_request_barrier;
+        void*                                                     m_inference_request = nullptr;
         void*                                                     m_response_allcator = nullptr;
     };
 

@@ -3,6 +3,7 @@ project(tritonserver_wrapper)
 set(CMAKE_CXX_STANDARD 17)
 
 option(BUILD_TOOLS "enable build tools" ON)
+option(BUILD_WITH_BACKWARD "enable with backward" ON)
 
 # rapidjson
 set(RAPIDJSON_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/rapidjson/include)
@@ -16,6 +17,15 @@ set(FILESYSTEM_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/filesystem/inc
 set(STB_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/stb/include)
 # libnpy
 set(LIBNPY_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/libnpy/include)
+
+# backward
+if (BUILD_WITH_BACKWARD)
+    add_definitions(-DUSE_BACKWARD)
+    add_definitions(-DBACKWARD_HAS_DW=1)
+    set(BACKWARD_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/backward/include)
+    set(BACKWARD_LIBS dw)
+endif()
+
 
 # tritonserver
 if(TRITONSERVER_INSTALL_DIR)
@@ -32,6 +42,7 @@ set(PROJECT_INCLUDE_PATH ${RAPIDJSON_INCLUDE_PATH}
     ${FILESYSTEM_INCLUDE_PATH}
     ${STB_INCLUDE_PATH}
     ${LIBNPY_INCLUDE_PATH}
+    ${BACKWARD_INCLUDE_PATH}
     ${TRITONSERVER_INCLUDE_PATH})
 
 set(PROJECT_LIB_PATH ${TRITONSERVER_LIB_PATH})
@@ -58,5 +69,5 @@ if(BUILD_TOOLS)
         ${PROJECT_INCLUDE_PATH}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/tools)
-    target_link_libraries(model_infer PRIVATE tritonserver_wrapper)
+    target_link_libraries(model_infer PRIVATE tritonserver_wrapper ${BACKWARD_LIBS})
 endif()

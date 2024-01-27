@@ -17,51 +17,11 @@
 #endif  // TRITON_ENABLE_GPU
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
+#include "tritonserver_engine/tritonserver_utils.h"
 #include "tritonserver_engine/tritonserver_engine.h"
 
 namespace TRITON_SERVER
 {
-
-    #define FAIL(MSG)                                                            \
-    do {                                                                         \
-        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: {}", (MSG));      \
-        exit(1);                                                                 \
-    } while (false)
-
-    #define FAIL_IF_ERR(X, MSG)                                                  \
-    do {                                                                         \
-        TRITONSERVER_Error* err__ = (X);                                         \
-        if (err__ != nullptr) {                                                  \
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: {}: {}-{}",   \
-                (MSG), TRITONSERVER_ErrorCodeString(err__),                      \
-                TRITONSERVER_ErrorMessage(err__));                               \
-            TRITONSERVER_ErrorDelete(err__);                                     \
-            exit(1);                                                             \
-        }                                                                        \
-    } while (false)
-
-    #define LOG_IF_ERR(X, MSG)                                                   \
-    do {                                                                         \
-        TRITONSERVER_Error* err__ = (X);                                         \
-        if (err__ != nullptr) {                                                  \
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: {}: {}-{}",   \
-                (MSG), TRITONSERVER_ErrorCodeString(err__),                      \
-                TRITONSERVER_ErrorMessage(err__));                               \
-            TRITONSERVER_ErrorDelete(err__);                                     \
-        }                                                                        \
-    } while (false)
-
-#ifdef TRITON_ENABLE_GPU
-    #define FAIL_IF_CUDA_ERR(X, MSG)                                             \
-    do {                                                                         \
-        cudaError_t err__ = (X);                                                 \
-        if (err__ != cudaSuccess) {                                              \
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: {}:{}",       \
-                (MSG), cudaGetErrorString(err__));                               \
-            exit(1);                                                             \
-        }                                                                        \
-    } while (false)
-#endif  // TRITON_ENABLE_GPU
 
     static size_t getTritonDataTypeByteSize(TRITONSERVER_DataType dtype)
     {
@@ -405,7 +365,7 @@ namespace TRITON_SERVER
             std::promise<TRITONSERVER_InferenceResponse*>* p =
                 reinterpret_cast<std::promise<TRITONSERVER_InferenceResponse*>*>(userp);
             p->set_value(response);
-            delete p;
+            // delete p;
         }
     }
 
@@ -415,7 +375,38 @@ namespace TRITON_SERVER
         return triton_server;
     }
 
-    void* TritonServerEngine::createResponseAllocator()
+    int TritonServerEngine::createInferenceRequest(const std::string model_name, const int64_t model_version, 
+        void** inference_req)
+    {
+        std::string model_key = model_name + ":" + std::to_string(model_version);
+        if (nullptr == m_server.get())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
+            return -1;
+        }
+        TRITONSERVER_InferenceRequest* irequest = nullptr;
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestNew(&irequest, m_server.get(), model_name.c_str(), model_version),
+            "creating inference request for model " + model_key);
+
+        *inference_req = (void*)irequest;
+        return 0;
+    }
+
+    void TritonServerEngine::deleteInferenceRequest(const std::string model_name, const int64_t model_version, 
+        void* inference_req)
+    {
+        std::string model_key = model_name + ":" + std::to_string(model_version);
+        TRITONSERVER_InferenceRequest* irequest = (TRITONSERVER_InferenceRequest*)inference_req;
+        if (nullptr == irequest)
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "inference request not init or init failed, please init first");
+            return;
+        }
+        LOG_IF_ERR(TRITONSERVER_InferenceRequestDelete(irequest), "deleting inference request for model " + model_key);
+        return;
+    }
+
+    int TritonServerEngine::createResponseAllocator(void** response_allocator)
     {
         // When triton needs a buffer to hold an output tensor, it will ask
         // us to provide the buffer. In this way we can have any buffer
@@ -426,17 +417,18 @@ namespace TRITON_SERVER
         // inference. We can reuse this response allocate object for any
         // number of inference requests.
         TRITONSERVER_ResponseAllocator* allocator = nullptr;
-        LOG_IF_ERR(TRITONSERVER_ResponseAllocatorNew(&allocator, ResponseAlloc, ResponseRelease, nullptr /* start_fn */),
-            "creating response allocator");
-        return allocator;
+        LOG_AND_RET_IF_ERR(TRITONSERVER_ResponseAllocatorNew(&allocator, ResponseAlloc, 
+            ResponseRelease, nullptr /* start_fn */), "creating response allocator");
+        *response_allocator = allocator;
+        return 0;
     }
 
-    void TritonServerEngine::destroyResponseAllocator(void* allocator)
+    void TritonServerEngine::destroyResponseAllocator(void* response_allocator)
     {
-        TRITONSERVER_ResponseAllocator* response_allocator = (TRITONSERVER_ResponseAllocator*)allocator;
-        if (nullptr != response_allocator)
+        TRITONSERVER_ResponseAllocator* allocator = (TRITONSERVER_ResponseAllocator*)response_allocator;
+        if (nullptr != allocator)
         {
-            LOG_IF_ERR(TRITONSERVER_ResponseAllocatorDelete(response_allocator), 
+            LOG_IF_ERR(TRITONSERVER_ResponseAllocatorDelete(allocator), 
                 "deleting response allocator");
         }
         return;
@@ -719,20 +711,89 @@ namespace TRITON_SERVER
         return 0;
     }
 
-    void TritonServerEngine::parseModelInferResponse(TRITONSERVER_InferenceResponse* response, 
-        const std::string model_name, const int64_t model_version, 
-        const std::map<std::string, ModelTensorAttr>& expect_outputs, 
-        std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors)
+    int TritonServerEngine::prepareModelInferRequestResponse(void* inference_req, const std::string model_name, 
+        const int64_t model_version, void* response_allocator, void* request_barrier, void* response_barrier, 
+        const std::vector<ModelTensorAttr>& input_attrs, 
+        const std::vector<ModelTensorAttr>& output_attrs, 
+        std::map<std::string, std::shared_ptr<TritonTensor>>& input_tensors)
     {
         std::string model_key = model_name + ":" + std::to_string(model_version);
+        TRITONSERVER_InferenceRequest* irequest = (TRITONSERVER_InferenceRequest*)inference_req;
+        TRITONSERVER_ResponseAllocator* allocator = (TRITONSERVER_ResponseAllocator*)response_allocator;
+        if (nullptr == allocator || nullptr == irequest || 
+            nullptr == request_barrier || nullptr == response_barrier)
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input allocator:{x}/request:{x}/"
+                "request_barrier:{x}/response_barrier{x} both must not nullptr", 
+                response_allocator, inference_req, request_barrier, response_barrier);
+            return -1;
+        }
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestRemoveAllInputs(irequest), 
+            "removing request all inputs fail");
+        for (auto i = 0; i < input_attrs.size(); i++)
+        {
+            std::string tensor_name = std::string(input_attrs[i].name);
+            std::vector<int64_t> input_shape = input_tensors[tensor_name]->shape();
+            TRITONSERVER_DataType datatype = input_tensors[tensor_name]->dataType();
+            LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestAddInput(irequest, tensor_name.c_str(), 
+                datatype, &input_shape[0], input_shape.size()), "assigning input: " + tensor_name + 
+                " meta-data to request for model " + model_key);
+            size_t input_size = input_tensors[tensor_name]->byteSize();
+            const void* input_base = input_tensors[tensor_name]->base<void>();
+            LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(irequest, tensor_name.c_str(), 
+                input_base, input_size, TRITONSERVER_MEMORY_CPU, 0 /* memory_type_id */), 
+                "assigning input: " + tensor_name + " data to request for model " + model_key);
+        }
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs(irequest), 
+            "removing request all outputs fail");
+        for (auto i = 0; i < output_attrs.size(); i++)
+        {
+            std::string tensor_name = std::string(output_attrs[i].name);
+            LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestAddRequestedOutput(irequest, tensor_name.c_str()), 
+                "assigning output: " + tensor_name + " to request for model " + model_key);
+        }
+
+        // init triton server request release callback
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestSetReleaseCallback(irequest, InferRequestRelease,
+            request_barrier), "setting request release callback for model " + model_key);
+
+        // init triton server response callback
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceRequestSetResponseCallback(irequest, allocator, 
+            nullptr /* response_allocator_userp */, InferResponseComplete, response_barrier), 
+            "setting response callback for model " + model_key);
+        return 0;
+    }
+
+    static int findOutputIndex(const std::vector<ModelTensorAttr>& output_attrs, const std::string& tensor_name)
+    {
+        for (auto i = 0; i < output_attrs.size(); i++)
+        {
+            auto& tensor_attr = output_attrs[i];
+            if (tensor_name == std::string(tensor_attr.name))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    int TritonServerEngine::parseModelInferResponse(void* complete_response, const std::string model_name, 
+        const int64_t model_version, const std::vector<ModelTensorAttr>& output_attrs, 
+        std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, bool release_response)
+    {
+        TRITONSERVER_InferenceResponse* response = (TRITONSERVER_InferenceResponse*)complete_response;
+        std::string model_key = model_name + ":" + std::to_string(model_version);
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceResponseError(response), "response status for model " + model_key);
+
         // get model output count
         uint32_t output_count;
-        FAIL_IF_ERR(TRITONSERVER_InferenceResponseOutputCount(response, &output_count),
+        LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceResponseOutputCount(response, &output_count),
             "getting number of response outputs for model " + model_key);
-        if (output_count != expect_outputs.size())
+        if (output_count != output_attrs.size())
         {
-            FAIL("expecting " + std::to_string(expect_outputs.size()) + " response outputs, got " + 
-                std::to_string(output_count) + " for model " + model_key);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "expecting {} response outputs, got {} for model {}", 
+                output_attrs.size(), std::to_string(output_count), model_key);
+            return -1;
         }
 
         for (uint32_t idx = 0; idx < output_count; ++idx)
@@ -747,27 +808,31 @@ namespace TRITON_SERVER
             int64_t memory_type_id;
             void* userp;
 
-            FAIL_IF_ERR(TRITONSERVER_InferenceResponseOutput(
-                response, idx, &cname, &datatype, &shape, &dim_count, &base,
-                &byte_size, &memory_type, &memory_type_id, &userp), "getting output info");
+            LOG_AND_RET_IF_ERR(TRITONSERVER_InferenceResponseOutput(response, idx, &cname, &datatype, &shape, 
+                &dim_count, &base, &byte_size, &memory_type, &memory_type_id, &userp), 
+                "getting output info for model" + model_key);
 
             if (cname == nullptr)
             {
-                FAIL("unable to get output name for model " + model_key);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "unable to get output name for model {}",model_key);
+                return -1;
             }
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "parse {} tensor {}", model_key, cname);
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_DEBUG, "parse {} tensor {}", model_key, cname);
 
             std::string name(cname);
-            if (expect_outputs.end() == expect_outputs.find(name))
+            int tensor_index = findOutputIndex(output_attrs, name);
+            if (-1 == tensor_index)
             {
-                FAIL("output " + name + " not in output tensor attr for model " + model_key);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "output {} not in output tensor attr for model {}",
+                    name, model_key);
             }
 
-            TRITONSERVER_DataType expected_datatype = (TRITONSERVER_DataType)expect_outputs.at(name).type;
+            TRITONSERVER_DataType expected_datatype = (TRITONSERVER_DataType)output_attrs[tensor_index].type;
             if (datatype != expected_datatype)
             {
-                FAIL("output " + name + " have unexpected datatype " + 
-                    std::string(TRITONSERVER_DataTypeString(datatype)) + " for model " + model_key);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "output {} have unexpected datatype {} for model {}", 
+                    name, TRITONSERVER_DataTypeString(datatype), model_key);
+                return -1;
             }
 
             // parepare output tensor
@@ -775,7 +840,9 @@ namespace TRITON_SERVER
             std::shared_ptr<TritonTensor> output_tensor(new TritonTensor(datatype, tensor_shape));
             if (nullptr == output_tensor.get() || nullptr == output_tensor->base<void>())
             {
-                FAIL("malloc buff to output " + name + " fail for model " + model_key);
+                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "malloc buff to output {} fail for model {}",
+                    name, model_key);
+                return -1;
             }
             // We make a copy of the data here... which we could avoid for
             // performance reasons but ok for this simple example.
@@ -807,13 +874,22 @@ namespace TRITON_SERVER
                     break;
                 }
             #endif
-
                 default:
-                    FAIL("unexpected memory type for model " + model_key);
+                {
+                    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "output {} has unexpected memory type for model {}", 
+                        name, model_key);
+                    return -1;
+                }
             }
             output_tensors[name] = output_tensor;
         }
-        return;
+
+        if (release_response)
+        {
+            FAIL_IF_ERR(TRITONSERVER_InferenceResponseDelete(response), "deleting inference response for model " 
+                + model_key);
+        }
+        return 0;
     }
 
     int TritonServerEngine::infer(const std::string model_name, const int64_t model_version, 
@@ -823,6 +899,11 @@ namespace TRITON_SERVER
         std::map<std::string, std::shared_ptr<TritonTensor>>& output_tensors, 
         void* response_allocator)
     {
+        if (nullptr == m_server.get())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
+            return -1;
+        }
         output_tensors.clear();
         std::string model_key = model_name + ":" + std::to_string(model_version);
         // check input tensors size equal to model inputs
@@ -877,13 +958,11 @@ namespace TRITON_SERVER
         }
 
         // Add the model outputs to the request...
-        std::map<std::string, ModelTensorAttr> expected_outputs;
         for (size_t i = 0; i < output_attrs.size(); i++)
         {
             std::string tensor_name = std::string(output_attrs[i].name);
             FAIL_IF_ERR(TRITONSERVER_InferenceRequestAddRequestedOutput(irequest, tensor_name.c_str()), 
                 "assigning output: " + tensor_name + " to request for model " + model_key);
-            expected_outputs[tensor_name] = output_attrs[i];
         }
 
         // Perform inference by calling TRITONSERVER_ServerInferAsync. This
@@ -909,7 +988,8 @@ namespace TRITON_SERVER
                 "response status for model " + model_key);
 
             // parse model infer output from response
-            parseModelInferResponse(completed_response, model_name, model_version, expected_outputs, output_tensors);
+            parseModelInferResponse((void*)completed_response, model_name, model_version, 
+                output_attrs, output_tensors);
 
             // delete model infer response
             FAIL_IF_ERR(TRITONSERVER_InferenceResponseDelete(completed_response), 
@@ -917,14 +997,40 @@ namespace TRITON_SERVER
         }
 
         request_release_future.get();
-        FAIL_IF_ERR(TRITONSERVER_InferenceRequestDelete(irequest), 
-            "deleting inference request for model " + model_key);
+        FAIL_IF_ERR(TRITONSERVER_InferenceRequestDelete(irequest), "deleting inference request for model " 
+            + model_key);
 
         if (nullptr == response_allocator)
         {
             FAIL_IF_ERR(TRITONSERVER_ResponseAllocatorDelete(allocator), 
                 "deleting response allocator for model " + model_key);
         }
+
+        return 0;
+    }
+
+    int TritonServerEngine::inferAsync(const std::string model_name, const int64_t model_version, 
+        void* inference_request)
+    {
+        std::string model_key = model_name + ":" + std::to_string(model_version);
+        if (nullptr == m_server.get())
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
+            return -1;
+        }
+        if (nullptr == inference_request)
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input request is nullptr for {}", model_key);
+            return -1;
+        }
+        TRITONSERVER_InferenceRequest* irequest = (TRITONSERVER_InferenceRequest*)inference_request;
+        // Perform inference by calling TRITONSERVER_ServerInferAsync. This
+        // call is asynchronous and therefore returns immediately. The
+        // completion of the inference and delivery of the response is done
+        // by triton by calling the "response complete" callback functions
+        // (InferResponseComplete in this case).
+        LOG_AND_RET_IF_ERR(TRITONSERVER_ServerInferAsync(m_server.get(), irequest, nullptr /* trace */),
+            "running inference for model " + model_key);
 
         return 0;
     }
@@ -936,7 +1042,7 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
             return -1;
         }
-        LOG_IF_ERR(TRITONSERVER_ServerLoadModel(m_server.get(), model_name.c_str()), 
+        LOG_AND_RET_IF_ERR(TRITONSERVER_ServerLoadModel(m_server.get(), model_name.c_str()), 
             "load model " + model_name + " fail");
         return 0;
     }
@@ -948,7 +1054,7 @@ namespace TRITON_SERVER
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "triton server not init or init failed, please init first");
             return -1;
         }
-        LOG_IF_ERR(TRITONSERVER_ServerUnloadModel(m_server.get(), model_name.c_str()), 
+        LOG_AND_RET_IF_ERR(TRITONSERVER_ServerUnloadModel(m_server.get(), model_name.c_str()), 
             "unload model " + model_name + " fail");
         return 0;
     }
