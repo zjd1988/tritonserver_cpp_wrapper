@@ -322,7 +322,7 @@ namespace TRITON_SERVER
                     }
                     if (err != cudaSuccess)
                     {
-                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree {x}:{}", 
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree 0x{:x}:{}", 
                             buffer, cudaGetErrorString(err));
                     }
                     break;
@@ -336,7 +336,7 @@ namespace TRITON_SERVER
                     }
                     if (err != cudaSuccess)
                     {
-                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree {x}:{}", 
+                        TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "error: failed to cudaFree 0x{:x}:{}", 
                             buffer, cudaGetErrorString(err));
                     }
                     break;
@@ -723,8 +723,8 @@ namespace TRITON_SERVER
         if (nullptr == allocator || nullptr == irequest || 
             nullptr == request_barrier || nullptr == response_barrier)
         {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input allocator:{x}/request:{x}/"
-                "request_barrier:{x}/response_barrier{x} both must not nullptr", 
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "input allocator:0x{:x}/request:0x{:x}/"
+                "request_barrier:0x{:x}/response_barrier0x{:x} both must not nullptr", 
                 response_allocator, inference_req, request_barrier, response_barrier);
             return -1;
         }
