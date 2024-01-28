@@ -22,8 +22,7 @@ extern "C" {
     return:
         int                             error code.
 */
-TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version = -1, 
-    bool support_async = false);
+TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version = -1);
 
 
 /*  modelDestroy
@@ -74,10 +73,11 @@ TRITONSERVER_API int modelInputsSet(ModelContext context, uint32_t n_inputs, Mod
 
     input:
         ModelContext context        the handle of context.
+        async                       call model async api
     return:
         int                         success:0, fail:-1
 */
-TRITONSERVER_API int modelRun(ModelContext context);
+TRITONSERVER_API int modelRun(ModelContext context, bool async = false);
 
 
 /*  modelOutputsGet

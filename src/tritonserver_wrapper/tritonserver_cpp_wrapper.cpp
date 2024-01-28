@@ -25,7 +25,7 @@ namespace TRITON_SERVER
         {"rknn", RKNN_PLATFORM_TYPE},
     };
 
-    TritonModel::TritonModel(const char* model_name, int64_t model_version, bool support_async)
+    TritonModel::TritonModel(const char* model_name, int64_t model_version)
     {
         if (nullptr == model_name)
         {
@@ -71,18 +71,15 @@ namespace TRITON_SERVER
             return;
         }
 
-        if (support_async)
+        // init triton server request
+        if (0 != TritonServerEngine::Instance().createInferenceRequest(model_name, model_version, 
+            &m_inference_request))
         {
-            // init triton server request
-            if (0 != TritonServerEngine::Instance().createInferenceRequest(model_name, model_version, 
-                &m_inference_request))
-            {
-                TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating inference reqeust for {}:{} fail", 
-                    model_name, model_version);
-                return;
-            }
-            m_async = support_async;
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "creating inference reqeust for {}:{} fail", 
+                model_name, model_version);
+            return;
         }
+
         m_model_status = true;
     }
 
@@ -248,9 +245,18 @@ namespace TRITON_SERVER
             }
             m_input_tensors[tensor_name] = triton_tensor;
         }
-        if (m_async)
-        {
+        return 0;
+    }
 
+    int TritonModel::run(bool async)
+    {
+        if (false == m_model_status)
+        {
+            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model status is false");
+            return -1;
+        }
+        if (async)
+        {
             m_inference_request_barrier = std::make_unique<std::promise<void>>();
             m_inference_response_barrier = std::make_unique<std::promise<void*>>();
             if (nullptr == m_inference_request_barrier.get() || nullptr == m_inference_response_barrier.get())
@@ -269,19 +275,6 @@ namespace TRITON_SERVER
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "praprae model input/output tensors for request fail");
                 return -1;
             }
-        }
-        return 0;
-    }
-
-    int TritonModel::run()
-    {
-        if (false == m_model_status)
-        {
-            TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model status is false");
-            return -1;
-        }
-        if (m_async)
-        {
             return TRITON_SERVER_INFER_ASYNC(m_model_name, m_model_version, m_inference_request);
         }
         else
@@ -314,7 +307,8 @@ namespace TRITON_SERVER
                 n_outputs, m_model_output_attrs.size());
             return -1;
         }
-        if (m_async)
+        // async run need to wait response/request barrrier
+        if (nullptr != m_inference_response_barrier.get() && nullptr != m_inference_request_barrier.get())
         {
             std::future<void*> completed = m_inference_response_barrier->get_future();
             void* completed_response = completed.get();

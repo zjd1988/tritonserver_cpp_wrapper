@@ -10,11 +10,10 @@
 #include "tritonserver_wrapper/tritonserver_cpp_wrapper.h"
 using namespace TRITON_SERVER;
 
-TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version, 
-    bool support_async)
+TRITONSERVER_API int modelInit(ModelContext* context, const char* model_name, int64_t model_version)
 {
     *context = nullptr;
-    std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version, support_async));
+    std::unique_ptr<TritonModel> model_inst(new TritonModel(model_name, model_version));
     if (nullptr == model_inst.get() || false == model_inst->status())
         return -1;
     *context = (ModelContext)model_inst.release();
@@ -46,12 +45,12 @@ TRITONSERVER_API int modelInputsSet(ModelContext context, uint32_t n_inputs, Mod
     return model_inst->inputsSet(n_inputs, inputs);
 }
 
-TRITONSERVER_API int modelRun(ModelContext context)
+TRITONSERVER_API int modelRun(ModelContext context, bool async)
 {
     if (nullptr == context)
         return -1;
     TritonModel* model_inst = (TritonModel*)context;
-    return  model_inst->run();
+    return  model_inst->run(async);
 }
 
 TRITONSERVER_API int modelOutputsGet(ModelContext context, uint32_t n_outputs, ModelTensor outputs[])

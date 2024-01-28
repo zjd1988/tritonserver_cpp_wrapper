@@ -39,8 +39,8 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
         // repo agent dir
         ("repo_agent_path", "repo agent path for triton server", 
             cxxopts::value<std::string>()->default_value("/opt/tritonserver/repoagents"))
-        // support async api call triton server 
-        ("support_async", "support async api call triton server init model and run")
+        // async model infer 
+        ("async_infer", "async model infer")
         // benchmark test
         ("benchmark", "benchmark test")
         // benchmark test times
@@ -104,8 +104,8 @@ int parseModelInferOption(int argc, char* argv[], CmdLineArgOption& arg_opt)
     arg_opt.repo_agent_path = parse_result["repo_agent_path"].as<std::string>();
 
     // 8 support async api
-    if (parse_result.count("support_async"))
-        arg_opt.support_async = true;
+    if (parse_result.count("async_infer"))
+        arg_opt.async_infer = true;
 
     // 9 check benchmark config
     if (parse_result.count("benchmark"))
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        model repo path: {}", cmd_option.model_repo_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          backends path: {}", cmd_option.backends_path);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "        repo agent path: {}", cmd_option.repo_agent_path);
-    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "          support async: {}", cmd_option.support_async);
+    TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "            async infer: {}", cmd_option.async_infer);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "         benchmark test: {}", cmd_option.benchmark);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "       benchmark number: {}", cmd_option.benchmark_number);
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "      log verbose level: {}", cmd_option.log_verbose_level);
@@ -166,8 +166,7 @@ int main(int argc, char* argv[])
 
     // init model context
     TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "2 init model context");
-    if (0 != modelInit(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version, 
-        cmd_option.support_async))
+    if (0 != modelInit(&model_context, cmd_option.model_name.c_str(), cmd_option.model_version))
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "init model context fail");
         goto FINAL;
@@ -202,7 +201,8 @@ int main(int argc, char* argv[])
     if (cmd_option.benchmark)
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model benchmark inference");
-        if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+        if (0 != modelInference(model_context, input_output_num, input_tensors, 
+            output_tensors, cmd_option.async_infer))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model warmup inference fail");
             goto FINAL;
@@ -211,7 +211,8 @@ int main(int argc, char* argv[])
         for (auto index = 0; index < cmd_option.benchmark_number; index++)
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "model benchmark inference {} times", index);
-            if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+            if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors, 
+                cmd_option.async_infer))
             {
                 TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
                 goto FINAL;
@@ -225,7 +226,7 @@ int main(int argc, char* argv[])
     else
     {
         TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_INFO, "6 model inference");
-        if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors))
+        if (0 != modelInference(model_context, input_output_num, input_tensors, output_tensors, cmd_option.async_infer))
         {
             TRITONSERVER_LOG(TRITONSERVER_LOG_LEVEL_ERROR, "model inference fail");
             goto FINAL;

@@ -20,14 +20,14 @@ namespace TRITON_SERVER
     class TritonModel
     {
     public:
-        TritonModel(const char* model_name, int64_t model_version = -1, bool support_async = false);
+        TritonModel(const char* model_name, int64_t model_version = -1);
         ~TritonModel();
 
     public:
         bool status() { return m_model_status; }
         int query(ModeQueryCmd cmd, void* info, uint32_t size);
         int inputsSet(uint32_t n_inputs, ModelTensor* inputs);
-        int run();
+        int run(bool async = false);
         int outputsGet(uint32_t n_outputs, ModelTensor* outputs);
         int outputsRelease(uint32_t n_outputs, ModelTensor* outputs);
 
@@ -41,8 +41,7 @@ namespace TRITON_SERVER
         std::map<std::string, std::shared_ptr<TritonTensor>>      m_input_tensors;
         std::map<std::string, std::shared_ptr<TritonTensor>>      m_output_tensors;
 
-        // for async model run
-        bool                                                      m_async = false;
+        // barrier for async model run
         std::unique_ptr<std::promise<void*>>                      m_inference_response_barrier;
         std::unique_ptr<std::promise<void>>                       m_inference_request_barrier;
         void*                                                     m_inference_request = nullptr;

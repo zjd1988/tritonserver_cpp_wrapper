@@ -18,8 +18,8 @@ namespace TRITON_SERVER
         int64_t                        model_version;
         std::vector<std::string>       input_files;
         bool                           output_flag = false;
-        // support async api
-        bool                           support_async = false;
+        // use async infer
+        bool                           async_infer = false;
         // model benchmark
         bool                           benchmark = false;
         int                            benchmark_number = 0;
@@ -44,6 +44,6 @@ namespace TRITON_SERVER
         const std::vector<ModelTensorAttr>& input_attrs, std::vector<ModelTensor>& input_tensors);
 
     int modelInference(const ModelContext model_context, const ModelInputOutputNum& input_output_num, 
-        std::vector<ModelTensor>& input_tensors, std::vector<ModelTensor>& output_tensors);
+        std::vector<ModelTensor>& input_tensors, std::vector<ModelTensor>& output_tensors, bool async = false);
 
 } // namespace TRITON_SERVER
